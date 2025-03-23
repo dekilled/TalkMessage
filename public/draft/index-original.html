@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerenciamento de Atendimento</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Lista de mensagens pendentes -->
+     <div class="content-container">
+        <div class="tabs">
+            <div class="selected">Pendentes</div>
+            <div class="">Concluídos</div>
+         </div>
+     </div>
+     
+    <div class="content">
+        <div id="pending-messages">
+            <h1>Mensagens Pendentes</h1>
+            <div class="item">
+                <div>1</div>
+                <div>
+                    <div>João Silva</div>
+                    <div>5511999999999</div>
+                </div>
+                <div>
+                    Consulta
+                </div>
+                <div>
+                    10:30<br>
+                    10/03/25
+                </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nome</th>
+                  <th>Número</th>
+                  <th>Tipo de Solicitação</th>
+                  <th>Hora</th>
+                  <th>Data</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="pending-list">
+                <!-- Lista gerada dinamicamente -->
+              </tbody>
+            </table>
+          </div>
+        <!-- Lista de atendimentos completos -->
+        <div id="completed-messages">
+            <h1>Atendimentos Concluídos</h1>
+            <table>
+                <thead>
+                    <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>Número</th>
+                    <th>Tipo de Solicitação</th>
+                    <th>Hora</th>
+                    <th>Data</th>
+                    </tr>
+                </thead>
+                <tbody id="completed-list">
+                    <!-- Lista gerada dinamicamente -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+
+    
+
+    <!-- Janela de bate-papo flutuante -->
+    <div id="chat-popup" class="hidden">
+      <div class="chat-header">
+        <h2>Conversa com <span id="chat-client-name"></span></h2>
+        <button id="close-chat" class="close-btn">X</button>
+      </div>
+      <div class="chat-content">
+        <div id="chat-flow"></div>
+      </div>
+      <div class="chat-footer">
+        <textarea id="chat-input" placeholder="Digite sua mensagem..."></textarea>
+        <button id="send-message">Enviar</button>
+        <button id="end-chat">Encerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>*/

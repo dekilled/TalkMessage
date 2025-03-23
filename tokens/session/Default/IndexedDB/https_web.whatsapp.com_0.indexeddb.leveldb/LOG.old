@@ -1,0 +1,13 @@
+2025/03/20-22:58:41.578 9afc Reusing MANIFEST C:\Users\luane\whats-bot\tokens\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/03/20-22:58:41.579 9afc Recovering log #124
+2025/03/20-22:58:41.587 9afc Reusing old log C:\Users\luane\whats-bot\tokens\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000124.log 
+2025/03/20-22:58:42.620 62f8 Level-0 table #129: started
+2025/03/20-22:58:42.627 62f8 Level-0 table #129: 221188 bytes OK
+2025/03/20-22:58:42.628 62f8 Delete type=0 #124
+2025/03/20-22:58:42.630 62f8 Manual compaction at level-0 from '\x002\x00\x00\x00' @ 72057594037927935 : 1 .. '\x003\x00\x00\x00' @ 0 : 0; will stop at (end)
+2025/03/20-22:58:44.191 7ddc Compacting 1@1 + 1@2 files
+2025/03/20-22:58:44.248 7ddc Generated table #130@1: 44037 keys, 1779386 bytes
+2025/03/20-22:58:44.248 7ddc Compacted 1@1 + 1@2 files => 1779386 bytes
+2025/03/20-22:58:44.249 7ddc compacted to: files[ 0 0 1 0 0 0 0 ]
+2025/03/20-22:58:44.249 7ddc Delete type=2 #126
+2025/03/20-22:58:44.249 7ddc Delete type=2 #129

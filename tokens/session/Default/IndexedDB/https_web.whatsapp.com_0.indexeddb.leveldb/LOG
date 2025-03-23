@@ -1,0 +1,13 @@
+2025/03/20-23:08:03.762 39c4 Reusing MANIFEST C:\Users\luane\whats-bot\tokens\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/03/20-23:08:03.762 39c4 Recovering log #128
+2025/03/20-23:08:03.779 39c4 Reusing old log C:\Users\luane\whats-bot\tokens\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000128.log 
+2025/03/20-23:08:04.784 5d58 Level-0 table #133: started
+2025/03/20-23:08:04.797 5d58 Level-0 table #133: 588710 bytes OK
+2025/03/20-23:08:04.798 5d58 Delete type=0 #128
+2025/03/20-23:08:04.800 39c4 Manual compaction at level-0 from '\x003\x00\x00\x00' @ 72057594037927935 : 1 .. '\x004\x00\x00\x00' @ 0 : 0; will stop at (end)
+2025/03/20-23:08:06.299 7ac4 Compacting 1@1 + 1@2 files
+2025/03/20-23:08:06.351 7ac4 Generated table #134@1: 46223 keys, 1842573 bytes
+2025/03/20-23:08:06.351 7ac4 Compacted 1@1 + 1@2 files => 1842573 bytes
+2025/03/20-23:08:06.352 7ac4 compacted to: files[ 0 0 1 0 0 0 0 ]
+2025/03/20-23:08:06.352 7ac4 Delete type=2 #130
+2025/03/20-23:08:06.352 7ac4 Delete type=2 #133

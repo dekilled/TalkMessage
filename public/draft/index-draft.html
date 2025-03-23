@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atendimentos</title>
+  <link rel="stylesheet" href="styles.css">
+  
+    <!-- Adicionar o script do Socket.IO antes do nosso código -->
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar no desktop e header no mobile -->
+    <aside class="sidebar">
+      <h2>Menu</h2>
+      <ul class="sidebar-menu">
+        <li>Estatísticas</li>
+        <li>Configurações</li>
+        <li>Filtros</li>
+      </ul>
+    </aside>
+    <!--
+    <div class="status">
+        <div class="block">
+            <h3>Pendentes</h3>
+            <div class="outter-circle">
+                <div class="inner-circle">
+                    1
+                </div>
+            </div>
+        </div>
+        <div class="block">
+            <h3>atendidos</h3>
+            <div class="outter-circle">
+                <div class="inner-circle">
+                    1
+                </div>
+            </div>
+        </div>
+    </div>*-->
+    <!-- Conteúdo principal -->
+    <main class="main-content">
+      <!-- Seção de Pendentes -->
+      <section id="pendentes" class="active">
+        <h1>Atendimentos Pendentes</h1>
+        <div id="appointments-container" class="list">
+        <!-- Os atendimentos serão inseridos aqui dinamicamente -->
+          <div class="item">
+            <div class="col">
+                <div class="row">Nome do Cliente</div>
+                <div class="row">5538999999999</div>
+            </div>
+            <div class="col">
+                <div class="row "hidden>pendente</div>
+                <div class="row">10h 30m</div>
+            </div>
+            <div class="col">
+                <div class="row">Consulta</div>
+                <div class="row">10/03/2025</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Seção de Atendidos -->
+      <section id="atendidos">
+        <h1>Atendimentos Concluídos</h1>
+        <div class="list">
+          <p>Nenhum atendimento concluído ainda.</p>
+        </div>
+      </section>
+    </main>
+
+    <div class="chat" style="display: none;">
+        <div class="header"></div>
+        <div class="conversation">
+
+        </div>
+        <div class="typin-box">
+            <div class="input" contenteditable="true"></div>
+            <input type="button" value="Enviar"/>
+        </div>
+    </div>
+
+    <!-- Tabs no modo mobile -->
+    <div class="tabs">
+      <button class="tab-button active" onclick="switchTab('pendentes')">Pendentes</button>
+      <button class="tab-button" onclick="switchTab('atendidos')">Atendidos</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+
+  <script>
+    const socket = io();
+    
+    function createAppointmentElement(appointment) {
+        return `
+            <div class="item" onclick="disableAutoReply('${appointment.phone}')">
+                <div class="col">
+                    <div class="row">${appointment.name}</div>
+                    <div class="row">${appointment.phone}</div>
+                </div>
+                <div class="col">
+                    <div class="row">pendente</div>
+                    <div class="row">${appointment.time}</div>
+                </div>
+                <div class="col">
+                    <div class="row">${appointment.service}</div>
+                    <div class="row">${appointment.date}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    async function disableAutoReply(phone) {
+        try {
+            const response = await fetch('/disable-auto-reply', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ number: phone })
+            });
+            const data = await response.json();
+            if (data.success) {
+                // Abre o WhatsApp Web com o número
+                window.open(`https://web.whatsapp.com/send?phone=${phone}`, '_blank');
+            }
+        } catch (error) {
+            console.error('Erro ao desativar auto-resposta:', error);
+        }
+    }
+
+    // Carrega atendimentos existentes
+    fetch('/appointments')
+        .then(response => response.json())
+        .then(appointments => {
+            const container = document.getElementById('appointments-container');
+            appointments.forEach(appointment => {
+                container.innerHTML += createAppointmentElement(appointment);
+            });
+        });
+
+    // Escuta novos atendimentos
+    socket.on('new_appointment', (appointment) => {
+        const container = document.getElementById('appointments-container');
+        container.innerHTML += createAppointmentElement(appointment);
+    });
+</script>
+</body>
+</html>

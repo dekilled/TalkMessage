@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#075e54">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <!-- Ícones para iOS -->
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icon-180x180.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="icon-167x167.png">
+    
+    <!-- Ícone para Android -->
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192x192.png">
+    
+    <!-- Splash Screen para iOS -->
+    <link rel="apple-touch-startup-image" href="splash.png">
+    
+    <!-- PWA manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <title>Sistema de Atendimento</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.4.4/qrcode.js" integrity="sha512-oxrVyBhqnzQ0BzuM0A/6dEIk0alz0p4SpDRaWvtuUoarIc8rnL5lVniHG5Dp21MRFojcQcmKHjaskNXhSaUPPw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    
+    
+</head>
+<body class="layout">
+    <!--<div class="layout">-->
+        <!-- Header Mobile -->
+        <header class="mobile-header">
+            <h3 id="page-title-mobile" class="mobile-only">Atendimentos Pendentes</h3>
+            <button class="config-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+        </header>
+
+        <!-- Sidebar (Desktop) -->
+        <nav class="sidebar hide-sidebar">
+            <div class="logo"> </div>
+            <ul class="menu">
+                <li class="active" data-section="pendentes" onclick="switchSection('pendentes')">Pendentes<!--<a href="#pendentes">Pendentes</a>--></li>
+                <li data-section="atendimento" onclick="switchSection('atendimento')">Em Atendimento<!--<a href="#atendimento">Em Atendimento</a>--></li>
+                <li data-section="concluidos" onclick="switchSection('concluidos')">Concluídos<!--<a href="#concluidos">Concluídos</a>--></li>
+            </ul>
+            <div class="menu-footer">
+                <ul class="menu">
+                    <li data-section="config" class="config-menu-item">
+                        <a href="#config">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                            Configurações
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Conteúdo Principal -->
+        <div class="main-wrapper">
+            <!-- Painel de Estatísticas -->
+            <div class="stats-panel" label="Início">
+                <div class="stat-card">
+                    <div class="stat-icon pending">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="pending-count">0</span>
+                        <span class="stat-label">Aguardando</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon active">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="active-count">3</span>
+                        <span class="stat-label">Em Atendimento</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon completed">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="completed-count">12</span>
+                        <span class="stat-label">Concluídos Hoje</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon total">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="total-count">20</span>
+                        <span class="stat-label">Total do Dia</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Titulo da página -->
+            <h2 id="page-title" class="desktop-only">Atendimentos Pendentes</h2>
+
+            <!-- Seções de Conteúdo -->
+            <main class="main-content">
+                    <section id="pendentes" label="Atendimentos pendentes" class="content-section">
+                        <!--<h2>Atendimentos Pendentes</h2>-->
+                        <div class="cards-container">
+                            <!-- Card de Exemplo 1 -->
+                            <div class="card pendente">
+                                <div class="card-header">
+                                    <h3>Maria Silva</h3>
+                                    <span class="phone">5538999999999</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Passagem</span>
+                                        <span class="service-date">10/03/2024</span>
+                                    </div>
+                                    <div class="service-info">
+                                        <span class="description">Passagem para São Paulo</span>
+                                        <span class="timestamp">Contato: 15:30</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Card de Exemplo 2 -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>João Santos</h3>
+                                    <span class="phone">5538988888888</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Exames</span>
+                                        <span class="service-date">11/03/2024</span>
+                                    </div>
+                                    <p class="description">Exame de sangue completo</p>
+                                    <span class="timestamp">Contato: 16:45</span>
+                                </div>
+                            </div>
+
+                            <!-- Card de Exemplo 2 -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>João Santos</h3>
+                                    <span class="phone">5538988888888</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Exames</span>
+                                        <span class="service-date">11/03/2024</span>
+                                    </div>
+                                    <p class="description">Exame de sangue completo</p>
+                                    <span class="timestamp">Contato: 16:45</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Card de Exemplo 2 -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>João Santos</h3>
+                                    <span class="phone">5538988888888</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Exames</span>
+                                        <span class="service-date">11/03/2024</span>
+                                    </div>
+                                    <p class="description">Exame de sangue completo</p>
+                                    <span class="timestamp">Contato: 16:45</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Card de Exemplo 2 -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>João Santos</h3>
+                                    <span class="phone">5538988888888</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Exames</span>
+                                        <span class="service-date">11/03/2024</span>
+                                    </div>
+                                    <p class="description">Exame de sangue completo</p>
+                                    <span class="timestamp">Contato: 16:45</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Card de Exemplo 2 -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>João Santos</h3>
+                                    <span class="phone">5538988888888</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Exames</span>
+                                        <span class="service-date">11/03/2024</span>
+                                    </div>
+                                    <p class="description">Exame de sangue completo</p>
+                                    <span class="timestamp">Contato: 16:45</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Card de Exemplo 2 -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>João Santos</h3>
+                                    <span class="phone">5538988888888</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Exames</span>
+                                        <span class="service-date">11/03/2024</span>
+                                    </div>
+                                    <p class="description">Exame de sangue completo</p>
+                                    <span class="timestamp">Contato: 16:45</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Card de Exemplo 2 -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>João Santos</h3>
+                                    <span class="phone">5538988888888</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Exames</span>
+                                        <span class="service-date">11/03/2024</span>
+                                    </div>
+                                    <p class="description">Exame de sangue completo</p>
+                                    <span class="timestamp">Contato: 16:45</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Card de Exemplo 2 -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>João Santos</h3>
+                                    <span class="phone">5538988888888</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Exames</span>
+                                        <span class="service-date">11/03/2024</span>
+                                    </div>
+                                    <p class="description">Exame de sangue completo</p>
+                                    <span class="timestamp">Contato: 16:45</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Card de Exemplo 2 -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>João Santos</h3>
+                                    <span class="phone">5538988888888</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Exames</span>
+                                        <span class="service-date">11/03/2024</span>
+                                    </div>
+                                    <p class="description">Exame de sangue completo</p>
+                                    <span class="timestamp">Contato: 16:45</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="atendimento" label="Em atendimento" class="content-section">
+                        <div class="cards-container">
+                            <div class="card active-card">
+                                <div class="card-header">
+                                    <h3>Pedro Oliveira</h3>
+                                    <span class="phone">5538977777777</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Cirurgia</span>
+                                        <span class="service-date">10/03/2024</span>
+                                    </div>
+                                    <p class="description">Consulta pré-operatória</p>
+                                    <span class="timestamp">Em atendimento desde: 14:20</span>
+                                    <!--<button class="finish-btn">Finalizar Atendimento</button>-->
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="concluidos" label="Atendimentos concluídos" class="content-section">
+                        <div class="cards-container">
+                            <div class="card completed-card">
+                                <div class="card-header">
+                                    <h3>Ana Souza</h3>
+                                    <span class="phone">5538966666666</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="service-info">
+                                        <span class="service-type">Exames</span>
+                                        <span class="service-date">10/03/2024</span>
+                                    </div>
+                                    <p class="description">Resultado de exame de vista</p>
+                                    <div class="completion-info">
+                                        <span class="timestamp">Atendido: 13:45</span>
+                                        <span class="resolution">Encaminhado para consulta</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="config" label="Configurações" class="content-section">
+                       
+                        
+                        <div class="config-page">
+                            <div class="config-card">
+                                <div class="button">
+                                    Conexão
+                                </div>
+                                <div class="button">
+                                    Mensagem de almoço
+                                </div>
+                                <div class="button">
+                                    Dispostivos autorizados
+                                </div>
+                                <div class="button">
+                                    Histórico
+                                </div>
+                            </div>
+                        </div>
+                        <div class="config-page" style="left: 0%; right: 0%;">
+                            <section class="page">
+                                <h3>Mensagem de pausa</h3>
+                                <div class="lunch-settings">
+                                    
+                                    <div class="setting-item bloco">
+                                        <div>Ativar mensagem de horário de almoço</div>
+                                        <div class="check-button">
+                                            <div class="check"></div>
+                                        </div>
+                                        <input type="checkbox" id="lunch-message-active" checked>
+                                    </div>
+                                    
+                                    <h4>Horário</h4>
+                                    <div class="time-range bloco">
+                                        <div class="time-input">
+                                            <label>Início:</label>
+                                            <input type="time" id="lunch-start" value="11:00">
+                                        </div>
+                                        <div class="time-input">
+                                            <input type="time" id="lunch-end" value="13:00">
+                                            <label>Fim:</label>
+                                        </div>
+                                    </div>
+                                    <h4>Mensagem personalizada:</h4>
+                                    <div class="message-input bloco">
+                                        
+                                        <!--<textarea id="lunch-message" rows="4">Olá! No momento estamos em horário de almoço (11h às 13h). Retornaremos seu contato assim que possível. Agradecemos a compreensão!</textarea>-->
+                                        <div class="message">Olá! No momento estamos em horário de almoço (11h às 13h). Retornaremos seu contato assim que possível. Agradecemos a compreensão!</div>
+                                        <input type="button" value="+ Adicionar" class="message-add"/>
+                                    </div>
+    
+                                    <button class="config-btn save-lunch-settings">Salvar Configurações</button>
+                                </div>
+                            </section>
+                            <section class="page" hidden>
+                                <!-- Status de Conexão -->
+                                <div id="connection-status" class="whatsapp-status bloco">
+                                    
+                                    <div class="conn-info">
+                                        <h4>Status do WhatsApp</h4>
+                                        <div id="status-indicator" class="status-indicator">Verificando...</div>
+                                    </div>
+                                    
+                                    
+                                    <div class="conn-status-verifying"></div>
+                                </div>
+
+                                <!-- Container do QR Code -->
+                                <div id="qr-container" class="qr-container bloco" style="display: none;">
+                                    <div class="qr-instructions">
+                                        <h4>Conecte seu WhatsApp</h4>
+                                        <ol>
+                                            <li>Abra o WhatsApp no seu celular</li>
+                                            <li>Toque em Menu ou Configurações e selecione WhatsApp Web</li>
+                                            <li>Aponte a câmera do seu celular para o QR Code</li>
+                                        </ol>
+                                    </div>
+                                    <div class="qr-code-wrapper">
+                                        <img id="qr-code" src="" alt="QR Code WhatsApp">
+                                    </div>
+                                </div>
+
+                                <!-- Mensagem de Conectado -->
+                                <div id="connected-message" class="connected-message" style="display: none;">
+                                    <div class="success-icon">
+                                        <div class="conn-info">
+                                            <h5>WhatsApp Conectado</h5>
+                                            <div id="phone-number" class="phone-number" style="display: block;">+5538999999999</div>
+                                        </div>
+                                        <div class="conn-status"></div>
+                                    </div>
+                                    <p>Seu WhatsApp está conectado e pronto para uso.</p>
+                                    <button onclick="disconnectWhatsApp()" class="config-btn disconnect-btn">Desconectar</button>
+                                </div>
+                            </section>
+                            <section class="page" hidden>
+                                <h3>Dispositivos Autorizados</h3>
+                                
+                                <!-- Adicionar novo dispositivo -->
+                                <div class="device-input-group bloco">
+                                    <div class="input-row">
+                                        <input type="text" id="device-name" placeholder="Nome do dispositivo" class="device-input">
+                                        <input type="text" id="device-ip" placeholder="Endereço IP (ex: 192.168.1.100)" class="device-input">
+                                        <select id="device-type" class="device-input">
+                                            <option value="computer">Computador</option>
+                                            <option value="mobile">Celular</option>
+                                        </select>
+                                    </div>
+                                    <div class="input-hint">
+                                        Formato: http://IP:3000 (ex: http://192.168.1.100:3000)
+                                    </div>
+                                    <button onclick="addDevice()" class="config-btn add-device-btn">
+                                        Adicionar Dispositivo
+                                    </button>
+                                </div>
+
+                                <!-- Lista de dispositivos -->
+                                <div class="devices-list bloco">
+                                    <h4>Dispositivos Conectados</h4>
+                                    <div class="device-cards" id="devices-container">
+                                        <!-- Dispositivo Principal -->
+                                        <div class="device-card primary">
+                                                <div class="device-icon">💻</div>
+                                            <div class="device-info">
+                                                <h5>Computador Principal (Recepção)</h5>
+                                                <span class="device-ip">http://localhost:3000</span>
+                                                <span class="device-badge primary">Principal</span>
+                                            </div>
+                                            <div class="device-status online"></div>
+                                            
+                                        </div>
+
+                                        <!-- Outros dispositivos (exemplo) -->
+                                        <div class="device-card">
+                                            
+                                            <div class="device-icon">📱</div>
+                                            <div class="device-info">
+                                                <h5>Celular Secretária</h5>
+                                                <span class="device-ip">http://192.168.1.101:3000</span>
+                                            </div>
+                                            <!--<div class="device-actions">
+                                                <button class="remove-device" onclick="removeDevice(this)">×</button>
+                                            </div>-->
+                                            <div class="device-status online"></div>
+                                        </div>
+
+                                        <div class="device-card">
+                                            <div class="device-icon">💻</div>
+                                            <div class="device-info">
+                                                <h5>Computador Interno</h5>
+                                                <span class="device-ip">http://192.168.1.102:3000</span>
+                                            </div>
+                                            <!--<div class="device-actions">
+                                                <button class="remove-device" onclick="removeDevice(this)">×</button>
+                                            </div>-->
+                                            <div class="device-status offline"></div>
+                                        </div>
+
+                                        <div class="device-card">
+                                            <div class="device-icon">💻</div>
+                                            <div class="device-info">
+                                                <h5>Computador Interno</h5>
+                                                <span class="device-ip">http://192.168.1.102:3000</span>
+                                            </div>
+                                            <!--<div class="device-actions">
+                                                <button class="remove-device" onclick="removeDevice(this)">×</button>
+                                            </div>-->
+                                            <div class="device-status offline"></div>
+                                        </div>
+
+                                        <div class="device-card">
+                                            <div class="device-icon">💻</div>
+                                            <div class="device-info">
+                                                <h5>Computador Interno</h5>
+                                                <span class="device-ip">http://192.168.1.102:3000</span>
+                                            </div>
+                                            <!--<div class="device-actions">
+                                                <button class="remove-device" onclick="removeDevice(this)">×</button>
+                                            </div>-->
+                                            <div class="device-status offline"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                            <section class="page" hidden>
+                                <h3>Histórico de Atendimentos</h3>
+                                    
+                                    <!-- Filtros -->
+                                    <div class="history-filters">
+                                        <div class="date-filter">
+                                            <input type="date" id="start-date" class="date-input">
+                                            <span>até</span>
+                                            <input type="date" id="end-date" class="date-input">
+                                            <button class="config-btn btn-primary btn-icon" onclick="filterHistory()">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                                                </svg>
+                                                Filtrar
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Gráfico de Atendimentos -->
+                                    <div class="history-chart">
+                                        <canvas id="attendanceChart"></canvas>
+                                    </div>
+
+                                    <!-- Tabela de Histórico -->
+                                    <div class="history-table">
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    <th>Data</th>
+                                                    <th>Total</th>
+                                                    <th>Concluídos</th>
+                                                    <th>Tempo Médio</th>
+                                                    <th>Pico</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="history-data">
+                                                <tr>
+                                                    <td>10/03/2024</td>
+                                                    <td>25</td>
+                                                    <td>23</td>
+                                                    <td>15min</td>
+                                                    <td>10:30</td>
+                                                </tr>
+                                                <tr>
+                                                    <td>09/03/2024</td>
+                                                    <td>20</td>
+                                                    <td>20</td>
+                                                    <td>12min</td>
+                                                    <td>11:00</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                            </section>
+                        </div>
+                    </section>
+            </main>
+            
+            
+        </div>
+        <div id="config-popup" class="config-popup" style="display:none;">
+            <h3>Computador Principal (Recepção)</h3>
+            <div id="device-address" class="device-ip"></div>
+            <div class="device-status-indicator">
+                <div>Online</div>
+                <div class="device-status online"></div>
+            </div>
+            <div class="QR-Code">
+                <img  id="qrcode" src="" width="250px" height="250px"/>
+            </div>
+            <div class="device-actions-popup">
+                <button class="cancel-device-removal" onclick="popupClose()">Cancelar</button>
+                <button class="remove-device2" onclick="removeDevice(this)">Apagar dispositivo</button>
+            </div>
+        </div>
+        <!-- Bottom Navigation --> 
+        <nav class="bottom-nav">
+            <a href="#" class="nav-item" data-section="home">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+                <span>Home</span>
+            </a>
+            <a href="#" class="nav-item" data-section="pendentes">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span>Pendentes</span>
+            </a>
+            <a href="#" class="nav-item" data-section="atendimento">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>Atendendo</span>
+            </a>
+            <a href="#" class="nav-item" data-section="concluidos">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <span>Concluídos</span>
+            </a>
+        </nav>
+    <!--<div>-->
+    <script>
+        //Gerador de Códigos QR
+        //const address = document.getElementById('device-address').innerHTML;
+        const qrCode = document.getElementById('qrcode');
+        const popup = document.getElementById('config-popup');
+
+
+        function generateQRCode(text) {
+            QRCode.toDataURL(text).then(dataURL =>{
+                console.log(dataURL.toString());
+                qrCode.setAttribute('src', dataURL);
+            });
+        }
+    </script>
+    <script>
+        // Gerenciamento de Estado
+        const state = {
+            currentSection: 'pendentes',
+            isMobile: false
+        };
+        // Função para gerar o QR Code
+        
+        function switchSection(sectionId) {
+            // Atualiza estado
+            state.currentSection = sectionId;
+            // Remove classes ativas de todos os elementos de navegação
+            document.querySelectorAll('.menu li, .nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+
+            // Adiciona classe ativa no item correto (desktop e mobile)
+            document.querySelector(`.menu li[data-section="${sectionId}"]`)?.classList.add('active');
+            document.querySelector(`.nav-item[data-section="${sectionId}"]`)?.classList.add('active');
+
+            // Esconde todas as seções
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.style.display = 'none';
+            });
+
+            const pageTitle = document.querySelector('#page-title');
+            const pageTitleMobile = document.querySelector('#page-title-mobile');
+            // Gerencia visibilidade do painel de estatísticas
+            const statsPanel = document.querySelector('.stats-panel');
+            if (sectionId === 'home' && state.isMobile) {
+                statsPanel.style.display = 'grid';
+                pageTitle.innerText = statsPanel.getAttribute('label');
+                pageTitleMobile.innerText = statsPanel.getAttribute('label');
+            } else {
+                statsPanel.style.display = state.isMobile ? 'none' : 'grid';
+            }
+
+            // Mostra a seção selecionada
+            const selectedSection = document.getElementById(sectionId);
+            if (selectedSection) {
+                selectedSection.style.display = 'block';
+                pageTitle.innerText = selectedSection.getAttribute('label');
+                pageTitleMobile.innerText = selectedSection.getAttribute('label');
+                console.log(`Label: ${selectedSection.getAttribute('label')}`)
+            }
+
+            // Atualiza URL sem recarregar a página
+            history.pushState({}, '', `#${sectionId}`);
+
+            // Armazena a seção atual no localStorage
+            //localStorage.setItem('currentSection', sectionId);
+
+        }
+
+        // Função para carregar a seção armazenada
+        /*function loadLastSection() {
+            const lastSection = localStorage.getItem('currentSection');
+            if (lastSection) {
+                // Chama a função para mudar para a seção armazenada
+                switchSection(lastSection);
+            } else {
+                // Se não houver seção armazenada, você pode definir uma seção padrão
+                switchSection('pendentes'); // Exemplo de seção padrão
+            }
+        }*/
+
+        // Gerenciamento de Layout Responsivo
+        function checkDevice() {
+            const wasMobile = state.isMobile;
+            state.isMobile = window.innerWidth <= 768;
+
+            // Elementos UI
+            const mobileHeader = document.querySelector('.mobile-header');
+            const bottomNav = document.querySelector('.bottom-nav');
+            const sidebar = document.querySelector('.sidebar');
+            const mainWrapper = document.querySelector('.main-wrapper');
+
+            if (state.isMobile) {
+                mobileHeader.style.display = 'flex';
+                bottomNav.style.display = 'flex';
+                //sidebar.style.display = 'none';
+                mainWrapper.style.marginLeft = '0';
+                
+                // Se acabou de mudar para mobile
+                if (!wasMobile) {
+                    switchSection(state.currentSection);
+                }
+            } else {
+                mobileHeader.style.display = 'none';
+                bottomNav.style.display = 'none';
+                //sidebar.style.display = 'block';
+                mainWrapper.style.marginLeft = '240px';
+                
+                // Se acabou de mudar para desktop
+                if (wasMobile) {
+                    console.log(`CurrentSession: ${state.currentSection}`);
+                    //switchSection(state.currentSection);
+                    //state.currentSection = 'pendentes';
+                    if(state.currentSection == 'home'){
+                       state.currentSection = 'pendentes';
+                    }
+
+                    switchSection(state.currentSection);
+                }
+            }
+        }
+
+        // Navegação por Hash URL
+        function handleHashChange() {
+            const hash = window.location.hash.slice(1) || 'pendentes';
+            switchSection(hash);
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Inicialização
+            checkDevice();
+            handleHashChange();
+            //loadLastSection();
+
+            // Click handlers para navegação
+            document.querySelectorAll('.menu li, .nav-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const section = item.getAttribute('data-section');
+                    switchSection(section);
+                });
+            });
+
+            // Configurações
+            const configBtn = document.querySelector('.config-btn');
+            if (configBtn) {
+                configBtn.addEventListener('click', () => switchSection('config'));
+            }
+        });
+
+        // Responsividade
+        window.addEventListener('resize', checkDevice);
+        window.addEventListener('hashchange', handleHashChange);
+
+        // Atualizar contadores
+        function updateCounters() {
+            const pendingCount = document.querySelectorAll('#pendentes .card').length;
+            const activeCount = document.querySelectorAll('#atendimento .card').length;
+            const completedCount = document.querySelectorAll('#concluidos .card').length;
+            const totalCount = pendingCount + activeCount + completedCount;
+
+            // Atualiza valores nos cards de estatísticas
+            document.getElementById('pending-count').textContent = pendingCount;
+            document.getElementById('active-count').textContent = activeCount;
+            document.getElementById('completed-count').textContent = completedCount;
+            document.getElementById('total-count').textContent = totalCount;
+        }
+
+        // Socket.IO listeners (se estiver usando)
+        if (typeof io !== 'undefined') {
+            const socket = io();
+
+            socket.on('updateCards', () => {
+                updateCounters();
+            });
+
+            socket.on('newMessage', () => {
+                updateCounters();
+            });
+        }
+
+        // Chama a função ao carregar a página
+        //window.addEventListener('load', loadLastSection);
+    </script>
+
+    <script>
+        const devicesContainer = document.getElementById('devices-container');
+        const configPopup = document.getElementById('config-popup');
+       
+        devicesContainer.childNodes.forEach(item =>{
+            item.addEventListener('click', ()=>{
+                popupOpen();
+                const pageAddress = item.children[1].children[1].innerText;
+                const webAddress = `${pageAddress}/public/`;
+                configPopup.querySelector('#device-address').innerText = webAddress;
+                console.log(webAddress);
+                generateQRCode(webAddress);
+            });
+            
+        } );
+
+        function popupOpen(){
+            
+            
+            configPopup.style.display = "block";
+            setTimeout(function(){
+                configPopup.style.bottom = "0px";
+            }, 100);
+        }
+        function popupClose(){
+            configPopup.style.bottom = "-400px";
+            setTimeout(function(){
+                configPopup.style.display = "none";
+            }, 400);
+        }
+    </script>
+
+</body>
+</html>

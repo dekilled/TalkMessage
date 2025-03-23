@@ -1,0 +1,144 @@
+/* styles.css */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f9f9f9;
+    width: 100%;
+  }
+  
+  .container {
+    position: fixed;
+    top: 0px;
+    bottom: 0px;
+    left: 0px;
+    right: 0px;
+    padding: 10px;
+    font-size: 10px;
+  }
+  
+  h1 {
+    text-align: center;
+    color: #333;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  
+  th, td {
+    padding: 10px;
+    border: 1px solid #ccc;
+    text-align: center;
+  }
+  
+  th {
+    background: #f2f2f2;
+    color: #000;
+  }
+  
+  .hidden {
+    display: none;
+  }
+  
+  #chat-popup {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 300px;
+    background: #fff;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  
+  .chat-header {
+    background: #007BFF;
+    color: #fff;
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+  }
+  
+  .chat-content {
+    height: 200px;
+    overflow-y: auto;
+    padding: 10px;
+    border-top: 1px solid #ddd;
+  }
+  
+  .chat-footer {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  textarea {
+    resize: none;
+    height: 60px;
+    margin-bottom: 10px;
+  }
+  
+  button {
+    padding: 10px;
+    border: none;
+    background: #007BFF;
+    color: #fff;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  
+  button:hover {
+    background: #0056b3;
+  }
+
+  .item{
+    display: grid;
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    grid-template-columns: 4% 34% 30% 30%;
+    background-color: #d3d3d3;
+    padding: 15px 1% ;
+    max-width: 98%;
+  } 
+  .item:active{
+    background-color: #adadad;
+  }
+
+
+  .content-container{
+    width: 100%;
+    display: block;
+  }
+
+  .tabs{
+    width: 100%;
+    height:60px;
+    display: grid;
+    grid-template-columns: repeat(2, 50%);
+    
+    justify-self: center;
+    align-self: center;
+    border-radius: 20px;
+    overflow: hidden;
+    color: #fff;
+  }
+  .tabs div{
+    
+    display:flex;
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background-color: #838383;
+  }
+  .tabs .selected{
+    background-color: #007BFF;
+    font-weight: bold;
+  }
+  
