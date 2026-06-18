@@ -475,6 +475,7 @@ wppconnect.create({
         io.emit('connection_status', { status });
     },
     logQR: false,
+    updatesEnabled: false,
 }).then((client) => {
     whatsappClient = client;
     connectionState = 'connected';
