@@ -28,8 +28,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.4.4/qrcode.js" integrity="sha512-oxrVyBhqnzQ0BzuM0A/6dEIk0alz0p4SpDRaWvtuUoarIc8rnL5lVniHG5Dp21MRFojcQcmKHjaskNXhSaUPPw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    
-    
+    <script src="/socket.io/socket.io.js"></script>
+
+
 </head>
 <body class="layout">
     <!--<div class="layout">-->
@@ -796,19 +797,6 @@
             document.getElementById('total-count').textContent = totalCount;
         }
 
-        // Socket.IO listeners (se estiver usando)
-        if (typeof io !== 'undefined') {
-            const socket = io();
-
-            socket.on('updateCards', () => {
-                updateCounters();
-            });
-
-            socket.on('newMessage', () => {
-                updateCounters();
-            });
-        }
-
         // Chama a função ao carregar a página
         //window.addEventListener('load', loadLastSection);
     </script>
@@ -844,6 +832,7 @@
             }, 400);
         }
     </script>
+    <script src="script.js"></script>
 
 </body>
 </html>
