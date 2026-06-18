@@ -1495,3 +1495,228 @@ body {
         height: 70px;
     }*/
 }
+
+/* ─── LOGIN OVERLAY ──────────────────────────────────────────────────────────── */
+.login-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+}
+
+.login-card {
+    background: white;
+    border-radius: 16px;
+    padding: 36px 32px;
+    max-width: 360px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+.login-logo {
+    margin-bottom: 12px;
+}
+
+.login-card h2 {
+    color: #075e54;
+    font-size: 1.6rem;
+    margin-bottom: 6px;
+}
+
+.login-subtitle {
+    color: #718096;
+    font-size: 0.9rem;
+    margin-bottom: 24px;
+}
+
+.login-field {
+    margin-bottom: 14px;
+    text-align: left;
+}
+
+.login-field .device-input {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    border-radius: 8px;
+}
+
+.login-field .device-input:focus {
+    outline: none;
+    border-color: #075e54;
+    box-shadow: 0 0 0 3px rgba(7, 94, 84, 0.1);
+}
+
+.login-error {
+    color: #dc3545;
+    font-size: 0.85rem;
+    text-align: left;
+    margin-bottom: 10px;
+    padding: 0 2px;
+}
+
+.login-submit-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 12px;
+    font-size: 1rem;
+    border-radius: 8px;
+    margin-top: 4px;
+}
+
+/* ─── USER BADGE ─────────────────────────────────────────────────────────────── */
+.user-badge-area {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    flex-wrap: wrap;
+}
+
+.user-name-display {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.85rem;
+    font-weight: 500;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-role-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.user-role-badge.role-admin,
+.role-badge.role-admin {
+    background: #dc3545;
+    color: white;
+}
+
+.user-role-badge.role-supervisor,
+.role-badge.role-supervisor {
+    background: #fd7e14;
+    color: white;
+}
+
+.user-role-badge.role-atendente,
+.role-badge.role-atendente {
+    background: #28a745;
+    color: white;
+}
+
+.logout-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.8);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.logout-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Mobile header badge (different colors since header bg is transparent) */
+.mobile-header .user-badge-area {
+    border-top: none;
+    padding: 0 0 0 6px;
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.mobile-header .user-name-display {
+    color: #333;
+}
+
+.mobile-header .user-role-badge {
+    display: none;
+}
+
+.mobile-header .logout-btn {
+    border-color: rgba(0, 0, 0, 0.25);
+    color: #333;
+    font-size: 0.75rem;
+}
+
+.mobile-header .logout-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #000;
+}
+
+/* ─── ROLE BADGE (tabela de usuários) ───────────────────────────────────────── */
+.role-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* ─── STATUS FUNCIONÁRIOS ────────────────────────────────────────────────────── */
+.status-active { color: #28a745; font-weight: 500; }
+.status-inactive { color: #dc3545; font-weight: 500; }
+
+/* ─── BOTÃO PEQUENO ──────────────────────────────────────────────────────────── */
+.btn-small {
+    padding: 4px 12px !important;
+    font-size: 0.8rem !important;
+    min-height: auto !important;
+    border-radius: 6px !important;
+}
+
+/* ─── TABELA DE USUÁRIOS ────────────────────────────────────────────────────── */
+.users-table {
+    overflow-x: auto;
+    margin-bottom: 16px;
+    padding: 0 !important;
+}
+
+.users-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.users-table th,
+.users-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.users-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.users-table tr:hover td {
+    background: #f8f9fa;
+}
+
+.new-user-form h4 {
+    margin-bottom: 12px;
+    color: #075e54;
+}

@@ -21,4 +21,6 @@ module.exports = {
     saveAppointments: (arr) => save('appointments.json', arr),
     loadCompleted: () => load('completed.json'),
     saveCompleted: (arr) => save('completed.json', arr),
+    loadUsers: () => load('users.json'),
+    saveUsers: (arr) => save('users.json', arr),
 };

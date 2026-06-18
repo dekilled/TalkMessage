@@ -1,15 +1,31 @@
 // 1. Imports
 const express = require('express');
-const QRCode = require('qrcode');
 const path = require('path');
 const http = require('http');
+const os = require('os');
 const wppconnect = require('@wppconnect-team/wppconnect');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
 const db = require('./db');
+const auth = require('./auth');
 
 // 2. Configurações iniciais
 const app = express();
 const server = http.createServer(app);
+
+// Session middleware compartilhado entre Express e Socket.IO
+const sessionMiddleware = session({
+    secret: process.env.SESSION_SECRET || 'talkmessage-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { httpOnly: true, sameSite: 'lax', maxAge: 8 * 60 * 60 * 1000 } // 8 horas
+});
+
+app.use(sessionMiddleware);
+
 const io = require('socket.io')(server);
+io.engine.use(sessionMiddleware);
+
 const PORT = process.env.PORT || 3000;
 
 // 3. Middleware
@@ -91,6 +107,19 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function getLocalIPs() {
+    const interfaces = os.networkInterfaces();
+    const ips = [];
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                ips.push(iface.address);
+            }
+        }
+    }
+    return ips;
+}
+
 function start(client) {
     let userStates = {};
 
@@ -108,17 +137,12 @@ function start(client) {
 
         io.emit('typing', { from });
 
-        console.log(`disabled Includes: ${disableAutoReply.includes(from)}`);
-        console.log(`number: ${from}`);
-        console.log(`boolean: ${autoReplyEnabled}`);
-
         if (disableAutoReply.includes(from) && autoReplyEnabled) {
             console.log(`Auto-respostas desativadas para: ${from}`);
             return;
         }
 
         const userState = userStates[from];
-        console.log('processando mensagem');
 
         if (!userState && message.body.trim() !== '' && /[a-zA-Z]/.test(message.body)) {
             userStates[from] = {
@@ -130,7 +154,6 @@ function start(client) {
                     contactTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                 }
             };
-            console.log(`Estado inicializado para ${from}`);
         }
 
         const currentUserState = userStates[from];
@@ -139,7 +162,6 @@ function start(client) {
         try {
             switch (currentUserState.step) {
                 case 'initial':
-                    console.log(`Step: ${currentUserState.step}`);
                     const welcomeMessage = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
                     await client.startTyping(from);
                     await delayRandom();
@@ -155,7 +177,6 @@ function start(client) {
                     break;
 
                 case 'awaiting_service':
-                    console.log(`Step: ${currentUserState.step}`);
                     const serviceOption = message.body;
                     const validServices = ['1', '2', '3'];
 
@@ -177,7 +198,6 @@ function start(client) {
                     break;
 
                 case 'awaiting_submenu':
-                    console.log(`Step: ${currentUserState.step}`);
                     const submenuOption = message.body;
                     const validSubmenuOptions = ['1', '2'];
 
@@ -199,7 +219,6 @@ function start(client) {
                     break;
 
                 case 'awaiting_name':
-                    console.log(`Step: ${currentUserState.step}`);
                     currentUserState.data.name = message.body;
                     await client.startTyping(from);
                     await delayRandom();
@@ -212,7 +231,6 @@ function start(client) {
                     break;
 
                 case 'awaiting_description':
-                    console.log(`Step: ${currentUserState.step}`);
                     currentUserState.data.description = message.body;
                     currentUserState.data.phone = from.replace('@c.us', '');
                     await client.startTyping(from);
@@ -230,28 +248,61 @@ function start(client) {
     });
 }
 
-// 6. Rotas
+// 6. Socket.IO — autenticação via sessão
+io.use((socket, next) => {
+    const sess = socket.request.session;
+    if (sess && sess.user) {
+        socket.user = sess.user;
+        return next();
+    }
+    next(new Error('Não autorizado'));
+});
+
+// 7. Rotas — Públicas (sem autenticação)
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.get('/appointments', (req, res) => {
+app.post('/auth/login', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ success: false, message: 'Usuário e senha são obrigatórios.' });
+    }
+    const users = db.loadUsers();
+    const user = users.find(u => u.username === username && u.active);
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).json({ success: false, message: 'Usuário ou senha incorretos.' });
+    }
+    req.session.user = { id: user.id, name: user.name, role: user.role, username: user.username };
+    res.json({ success: true, user: req.session.user });
+});
+
+app.post('/auth/logout', (req, res) => {
+    req.session.destroy(() => res.json({ success: true }));
+});
+
+app.get('/auth/me', auth.authMiddleware, (req, res) => {
+    res.json(req.session.user);
+});
+
+// 8. Rotas — API Protegidas
+app.get('/appointments', auth.authMiddleware, (req, res) => {
     res.json(appointments);
 });
 
-app.get('/completed-appointments', (req, res) => {
+app.get('/completed-appointments', auth.authMiddleware, (req, res) => {
     res.json(completedAppointments);
 });
 
-app.get('/disabled-numbers', (req, res) => {
+app.get('/disabled-numbers', auth.authMiddleware, (req, res) => {
     res.json(disableAutoReply);
 });
 
-app.get('/connection-status', (req, res) => {
+app.get('/connection-status', auth.authMiddleware, (req, res) => {
     res.json({ status: connectionState });
 });
 
-app.get('/appointments/stats', (req, res) => {
+app.get('/appointments/stats', auth.authMiddleware, auth.requireRole('supervisor', 'admin'), (req, res) => {
     const stats = {};
     completedAppointments.forEach(a => {
         const date = a.completionDate ? a.completionDate.slice(0, 10) : 'desconhecido';
@@ -263,7 +314,7 @@ app.get('/appointments/stats', (req, res) => {
     res.json(result);
 });
 
-app.post('/disable-auto-reply', (req, res) => {
+app.post('/disable-auto-reply', auth.authMiddleware, (req, res) => {
     const { number } = req.body;
     const formattedNumber = `${number}@c.us`;
     if (!disableAutoReply.includes(formattedNumber)) {
@@ -274,14 +325,14 @@ app.post('/disable-auto-reply', (req, res) => {
     }
 });
 
-app.post('/enable-auto-reply', (req, res) => {
+app.post('/enable-auto-reply', auth.authMiddleware, (req, res) => {
     const { number } = req.body;
     const formattedNumber = `${number}@c.us`;
     disableAutoReply = disableAutoReply.filter(num => num !== formattedNumber);
     res.json({ success: true, message: `Auto-respostas reativadas para o número: ${formattedNumber}.` });
 });
 
-app.post('/complete-appointment', (req, res) => {
+app.post('/complete-appointment', auth.authMiddleware, (req, res) => {
     const { phone, name, service, resolution, completedAt } = req.body;
     const formattedNumber = `${phone}@c.us`;
 
@@ -294,7 +345,8 @@ app.post('/complete-appointment', (req, res) => {
             service,
             resolution,
             completedAt,
-            completionDate: new Date().toISOString()
+            completionDate: new Date().toISOString(),
+            completedBy: req.session.user.name
         };
 
         completedAppointments.push(completedAppointment);
@@ -312,7 +364,7 @@ app.post('/complete-appointment', (req, res) => {
     }
 });
 
-app.post('/disconnect-whatsapp', async (req, res) => {
+app.post('/disconnect-whatsapp', auth.authMiddleware, auth.requireRole('admin'), async (req, res) => {
     try {
         if (whatsappClient) {
             await whatsappClient.close();
@@ -325,6 +377,80 @@ app.post('/disconnect-whatsapp', async (req, res) => {
     }
 });
 
+// 9. Rotas — Gerenciamento de Usuários (admin only)
+app.get('/users', auth.authMiddleware, auth.requireRole('admin'), (req, res) => {
+    const users = db.loadUsers().map(({ password, ...u }) => u);
+    res.json(users);
+});
+
+app.post('/users', auth.authMiddleware, auth.requireRole('admin'), async (req, res) => {
+    const { name, username, password, role } = req.body;
+    if (!name || !username || !password || !role) {
+        return res.status(400).json({ success: false, message: 'Todos os campos são obrigatórios.' });
+    }
+    const validRoles = ['atendente', 'supervisor', 'admin'];
+    if (!validRoles.includes(role)) {
+        return res.status(400).json({ success: false, message: 'Role inválido.' });
+    }
+    const users = db.loadUsers();
+    if (users.find(u => u.username === username)) {
+        return res.status(409).json({ success: false, message: 'Nome de usuário já existe.' });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = {
+        id: Date.now().toString(),
+        name,
+        username,
+        password: hashedPassword,
+        role,
+        active: true,
+        createdAt: new Date().toISOString()
+    };
+    users.push(newUser);
+    db.saveUsers(users);
+    const { password: _, ...safeUser } = newUser;
+    res.json({ success: true, user: safeUser });
+});
+
+app.put('/users/:id', auth.authMiddleware, auth.requireRole('admin'), async (req, res) => {
+    const { id } = req.params;
+    const { name, role, password } = req.body;
+    const users = db.loadUsers();
+    const idx = users.findIndex(u => u.id === id);
+    if (idx === -1) {
+        return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    }
+    if (name) users[idx].name = name;
+    if (role) {
+        const validRoles = ['atendente', 'supervisor', 'admin'];
+        if (!validRoles.includes(role)) {
+            return res.status(400).json({ success: false, message: 'Role inválido.' });
+        }
+        users[idx].role = role;
+    }
+    if (password) {
+        users[idx].password = await bcrypt.hash(password, 10);
+    }
+    db.saveUsers(users);
+    const { password: _, ...safeUser } = users[idx];
+    res.json({ success: true, user: safeUser });
+});
+
+app.delete('/users/:id', auth.authMiddleware, auth.requireRole('admin'), (req, res) => {
+    const { id } = req.params;
+    if (req.session.user.id === id) {
+        return res.status(400).json({ success: false, message: 'Não é possível desativar o próprio usuário.' });
+    }
+    const users = db.loadUsers();
+    const idx = users.findIndex(u => u.id === id);
+    if (idx === -1) {
+        return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+    }
+    users[idx].active = false;
+    db.saveUsers(users);
+    res.json({ success: true });
+});
+
 // Error handler global
 app.use((err, req, res, next) => {
     console.error('Erro na rota:', err.message);
@@ -335,7 +461,9 @@ process.on('unhandledRejection', (reason) => {
     console.error('Rejeição não tratada:', reason);
 });
 
-// 7. Inicialização
+// 10. Inicialização
+auth.initDefaultAdmin().catch(console.error);
+
 wppconnect.create({
     session: process.env.SESSION_NAME || 'sessionName',
     catchQR: (base64Qr) => {
@@ -354,6 +482,10 @@ wppconnect.create({
     start(client);
 }).catch((error) => console.error('Erro ao iniciar WPPConnect:', error));
 
-server.listen(PORT, () => {
-    console.log(`Servidor rodando em http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+    const ips = getLocalIPs();
+    console.log('\nServidor TalkMessage iniciado:');
+    console.log(`  → http://localhost:${PORT}  (este computador)`);
+    ips.forEach(ip => console.log(`  → http://${ip}:${PORT}  (rede local)`));
+    console.log('');
 });

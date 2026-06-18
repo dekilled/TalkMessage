@@ -33,11 +33,40 @@
 
 </head>
 <body class="layout">
+
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="login-overlay" style="display: none;">
+        <div class="login-card">
+            <div class="login-logo">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="#075e54">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+            </div>
+            <h2>TalkMessage</h2>
+            <p class="login-subtitle">Faça login para continuar</p>
+            <form id="login-form">
+                <div class="login-field">
+                    <input type="text" id="login-username" placeholder="Usuário" class="device-input" autocomplete="username">
+                </div>
+                <div class="login-field">
+                    <input type="password" id="login-password" placeholder="Senha" class="device-input" autocomplete="current-password">
+                </div>
+                <div id="login-error" class="login-error" hidden></div>
+                <button type="submit" class="config-btn btn-primary login-submit-btn">Entrar</button>
+            </form>
+        </div>
+    </div>
+
     <!--<div class="layout">-->
         <!-- Header Mobile -->
         <header class="mobile-header">
             <h3 id="page-title-mobile" class="mobile-only">Atendimentos Pendentes</h3>
-            <button class="config-btn">
+            <div class="user-badge-area" style="display: none;">
+                <span class="user-name-display"></span>
+                <span class="user-role-badge"></span>
+                <button onclick="logout()" class="logout-btn">Sair</button>
+            </div>
+            <button class="config-btn" data-min-role="supervisor">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="3"></circle>
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -55,7 +84,7 @@
             </ul>
             <div class="menu-footer">
                 <ul class="menu">
-                    <li data-section="config" class="config-menu-item">
+                    <li data-section="config" class="config-menu-item" data-min-role="supervisor">
                         <a href="#config">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="3"></circle>
@@ -65,6 +94,11 @@
                         </a>
                     </li>
                 </ul>
+                <div class="user-badge-area" style="display: none;">
+                    <span class="user-name-display"></span>
+                    <span class="user-role-badge"></span>
+                    <button onclick="logout()" class="logout-btn">Sair</button>
+                </div>
             </div>
         </nav>
 
@@ -356,6 +390,9 @@
                                 <div class="button">
                                     Histórico
                                 </div>
+                                <div class="button" data-min-role="admin">
+                                    Usuários
+                                </div>
                             </div>
                         </div>
                         <div class="config-page" style="left: 0%; right: 0%;">
@@ -431,7 +468,7 @@
                                         <div class="conn-status"></div>
                                     </div>
                                     <p>Seu WhatsApp está conectado e pronto para uso.</p>
-                                    <button onclick="disconnectWhatsApp()" class="config-btn disconnect-btn">Desconectar</button>
+                                    <button onclick="disconnectWhatsApp()" class="config-btn disconnect-btn" data-min-role="admin">Desconectar</button>
                                 </div>
                             </section>
                             <section class="page" hidden>
@@ -450,7 +487,7 @@
                                     <div class="input-hint">
                                         Formato: http://IP:3000 (ex: http://192.168.1.100:3000)
                                     </div>
-                                    <button onclick="addDevice()" class="config-btn add-device-btn">
+                                    <button onclick="addDevice()" class="config-btn add-device-btn" data-min-role="admin">
                                         Adicionar Dispositivo
                                     </button>
                                 </div>
@@ -525,7 +562,7 @@
                             </section>
                             <section class="page" hidden>
                                 <h3>Histórico de Atendimentos</h3>
-                                    
+
                                     <!-- Filtros -->
                                     <div class="history-filters">
                                         <div class="date-filter">
@@ -576,6 +613,45 @@
                                             </tbody>
                                         </table>
                                     </div>
+                            </section>
+                            <section class="page" hidden>
+                                <h3>Gerenciamento de Funcionários</h3>
+
+                                <!-- Tabela de usuários -->
+                                <div class="users-table bloco">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Nome</th>
+                                                <th>Usuário</th>
+                                                <th>Função</th>
+                                                <th>Status</th>
+                                                <th>Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="users-table-body">
+                                            <tr><td colspan="5">Carregando...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- Formulário para novo funcionário -->
+                                <div class="new-user-form bloco">
+                                    <h4>Adicionar Funcionário</h4>
+                                    <div class="input-row">
+                                        <input type="text" id="new-user-name" placeholder="Nome completo" class="device-input">
+                                        <input type="text" id="new-user-username" placeholder="Usuário (login)" class="device-input">
+                                        <input type="password" id="new-user-password" placeholder="Senha" class="device-input">
+                                        <select id="new-user-role" class="device-input">
+                                            <option value="">Selecione a função</option>
+                                            <option value="atendente">Atendente</option>
+                                            <option value="supervisor">Supervisor</option>
+                                            <option value="admin">Admin</option>
+                                        </select>
+                                    </div>
+                                    <div id="new-user-error" class="login-error" hidden></div>
+                                    <button onclick="saveNewUser()" class="config-btn btn-primary">Adicionar Funcionário</button>
+                                </div>
                             </section>
                         </div>
                     </section>

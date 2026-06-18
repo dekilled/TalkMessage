@@ -1,35 +1,156 @@
-// Socket.IO — conexão em tempo real
-const socket = io();
+// Estado global de autenticação
+let currentUser = null;
+let socket = null;
 
-// Eventos recebidos do servidor
-socket.on('new_appointment', (data) => {
-    addAppointmentCard(data);
+const ROLE_LEVEL = { atendente: 1, supervisor: 2, admin: 3 };
+const ROLE_LABEL = { atendente: 'Atendente', supervisor: 'Supervisor', admin: 'Admin' };
+
+// ─── AUTENTICAÇÃO ────────────────────────────────────────────────────────────
+
+async function initAuth() {
+    try {
+        const res = await fetch('/auth/me');
+        if (!res.ok) { showLoginOverlay(); return; }
+        currentUser = await res.json();
+        hideLoginOverlay();
+        initApp();
+    } catch {
+        showLoginOverlay();
+    }
+}
+
+function showLoginOverlay() {
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) overlay.style.display = 'flex';
+}
+
+function hideLoginOverlay() {
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+function applyPermissions(role) {
+    const level = ROLE_LEVEL[role] || 0;
+    document.querySelectorAll('[data-min-role]').forEach(el => {
+        const required = el.getAttribute('data-min-role');
+        el.hidden = level < (ROLE_LEVEL[required] || 0);
+    });
+
+    // Exibe badges de usuário
+    const nameEls = document.querySelectorAll('.user-name-display');
+    nameEls.forEach(el => { el.textContent = currentUser.name; });
+
+    const roleEls = document.querySelectorAll('.user-role-badge');
+    roleEls.forEach(el => {
+        el.textContent = ROLE_LABEL[role] || role;
+        el.className = `user-role-badge role-${role}`;
+    });
+
+    const badges = document.querySelectorAll('.user-badge-area');
+    badges.forEach(el => { el.style.display = 'flex'; });
+}
+
+function logout() {
+    fetch('/auth/logout', { method: 'POST' })
+        .then(() => {
+            if (socket) { socket.disconnect(); socket = null; }
+            currentUser = null;
+            // Limpa dados da tela
+            ['#pendentes .cards-container', '#atendimento .cards-container', '#concluidos .cards-container'].forEach(sel => {
+                const el = document.querySelector(sel);
+                if (el) el.innerHTML = '';
+            });
+            const badges = document.querySelectorAll('.user-badge-area');
+            badges.forEach(el => { el.style.display = 'none'; });
+            showLoginOverlay();
+        })
+        .catch(err => console.error('Erro ao sair:', err));
+}
+
+// ─── INICIALIZAÇÃO DO APP ─────────────────────────────────────────────────────
+
+function initApp() {
+    applyPermissions(currentUser.role);
+
+    // Limpa cards hardcoded de demonstração
+    ['#pendentes .cards-container', '#atendimento .cards-container', '#concluidos .cards-container'].forEach(sel => {
+        const el = document.querySelector(sel);
+        if (el) el.innerHTML = '';
+    });
     updateCounters();
-});
 
-socket.on('appointment_completed', (data) => {
-    const activeCard = document.querySelector(`#atendimento .card[data-phone="${data.phone}"]`);
-    if (activeCard) activeCard.remove();
-    addCompletedCard(data);
-    updateCounters();
-});
+    // Conecta Socket.IO
+    socket = io();
 
-socket.on('qr_code', (data) => {
-    const qrImg = document.getElementById('qr-code');
-    const qrContainer = document.getElementById('qr-container');
-    const connectedMessage = document.getElementById('connected-message');
-    const indicator = document.getElementById('status-indicator');
-    if (qrImg) qrImg.src = data.qr;
-    if (qrContainer) qrContainer.style.display = 'flex';
-    if (connectedMessage) connectedMessage.style.display = 'none';
-    if (indicator) indicator.textContent = 'Aguardando conexão';
-});
+    socket.on('connect_error', (err) => {
+        if (err.message === 'Não autorizado') {
+            currentUser = null;
+            showLoginOverlay();
+        }
+    });
 
-socket.on('connection_status', (data) => {
-    updateConnectionUI(data.status);
-});
+    socket.on('new_appointment', (data) => {
+        addAppointmentCard(data);
+        updateCounters();
+    });
 
-// Atualiza UI de acordo com o status da conexão WhatsApp
+    socket.on('appointment_completed', (data) => {
+        const activeCard = document.querySelector(`#atendimento .card[data-phone="${data.phone}"]`);
+        if (activeCard) activeCard.remove();
+        addCompletedCard(data);
+        updateCounters();
+    });
+
+    socket.on('qr_code', (data) => {
+        const qrImg = document.getElementById('qr-code');
+        const qrContainer = document.getElementById('qr-container');
+        const connectedMessage = document.getElementById('connected-message');
+        const indicator = document.getElementById('status-indicator');
+        if (qrImg) qrImg.src = data.qr;
+        if (qrContainer) qrContainer.style.display = 'flex';
+        if (connectedMessage) connectedMessage.style.display = 'none';
+        if (indicator) indicator.textContent = 'Aguardando conexão';
+    });
+
+    socket.on('connection_status', (data) => {
+        updateConnectionUI(data.status);
+    });
+
+    // Carrega dados persistidos
+    fetch('/appointments')
+        .then(res => res.json())
+        .then(data => { data.forEach(a => addAppointmentCard(a)); updateCounters(); })
+        .catch(err => console.error('Erro ao carregar atendimentos:', err));
+
+    fetch('/completed-appointments')
+        .then(res => res.json())
+        .then(data => { data.forEach(a => addCompletedCard(a)); updateCounters(); })
+        .catch(err => console.error('Erro ao carregar concluídos:', err));
+
+    // Wiring dos botões da config (mapeamento botão → página)
+    // Botões: 0=Conexão, 1=Almoço, 2=Dispositivos, 3=Histórico, 4=Usuários
+    // Páginas: 0=Almoço, 1=Conexão, 2=Dispositivos, 3=Histórico, 4=Usuários
+    const CONFIG_PAGE_MAP = [1, 0, 2, 3, 4];
+    document.querySelectorAll('#config .config-card .button').forEach((btn, i) => {
+        btn.addEventListener('click', () => showConfigPage(CONFIG_PAGE_MAP[i]));
+    });
+
+    // Status inicial do WhatsApp
+    fetch('/connection-status')
+        .then(res => res.json())
+        .then(data => updateConnectionUI(data.status))
+        .catch(() => {});
+
+    setInterval(() => {
+        fetch('/connection-status')
+            .then(res => res.json())
+            .then(data => updateConnectionUI(data.status))
+            .catch(() => {});
+    }, 30000);
+}
+
+// ─── CONEXÃO WHATSAPP ─────────────────────────────────────────────────────────
+
 function updateConnectionUI(status) {
     const connectedStatuses = ['isLogged', 'qrReadSuccess', 'chatsAvailable', 'connected'];
     const indicator = document.getElementById('status-indicator');
@@ -49,7 +170,15 @@ function updateConnectionUI(status) {
     }
 }
 
-// Escapa strings para evitar XSS ao inserir no HTML
+function disconnectWhatsApp() {
+    fetch('/disconnect-whatsapp', { method: 'POST' })
+        .then(res => res.json())
+        .then(() => updateConnectionUI('disconnected'))
+        .catch(err => console.error('Erro ao desconectar:', err));
+}
+
+// ─── CARDS DE ATENDIMENTO ─────────────────────────────────────────────────────
+
 function escapeHtml(str) {
     return String(str || '')
         .replace(/&/g, '&amp;')
@@ -58,7 +187,6 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
-// Renderiza card de atendimento pendente
 function addAppointmentCard(data) {
     const container = document.querySelector('#pendentes .cards-container');
     if (!container) return;
@@ -84,7 +212,6 @@ function addAppointmentCard(data) {
     container.insertAdjacentHTML('afterbegin', cardHTML);
 }
 
-// Renderiza card de atendimento concluído
 function addCompletedCard(data) {
     const container = document.querySelector('#concluidos .cards-container');
     if (!container) return;
@@ -113,18 +240,11 @@ function addCompletedCard(data) {
     container.insertAdjacentHTML('afterbegin', cardHTML);
 }
 
-// Finaliza atendimento e move para concluídos
 function finishCall(phone, name, service) {
     fetch('/complete-appointment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            phone,
-            name,
-            service,
-            resolution: 'Atendido',
-            completedAt: new Date().toISOString()
-        })
+        body: JSON.stringify({ phone, name, service, resolution: 'Atendido', completedAt: new Date().toISOString() })
     })
     .then(res => res.json())
     .then(data => {
@@ -137,28 +257,17 @@ function finishCall(phone, name, service) {
     .catch(err => console.error('Erro ao finalizar atendimento:', err));
 }
 
-// Desconecta WhatsApp
-function disconnectWhatsApp() {
-    fetch('/disconnect-whatsapp', { method: 'POST' })
-        .then(res => res.json())
-        .then(() => updateConnectionUI('disconnected'))
-        .catch(err => console.error('Erro ao desconectar:', err));
-}
+// ─── DISPOSITIVOS ─────────────────────────────────────────────────────────────
 
-// Adiciona dispositivo na lista de autorizados
 function addDevice() {
     const name = document.getElementById('device-name').value.trim();
     const ip = document.getElementById('device-ip').value.trim();
     const type = document.getElementById('device-type').value;
 
-    if (!name || !ip) {
-        alert('Preencha o nome e o endereço IP do dispositivo.');
-        return;
-    }
+    if (!name || !ip) { alert('Preencha o nome e o endereço IP do dispositivo.'); return; }
 
     const icon = type === 'mobile' ? '📱' : '💻';
     const container = document.getElementById('devices-container');
-
     const cardHTML = `
         <div class="device-card">
             <div class="device-icon">${icon}</div>
@@ -167,23 +276,22 @@ function addDevice() {
                 <span class="device-ip">http://${escapeHtml(ip)}:3000</span>
             </div>
             <div class="device-actions">
-                <button class="remove-device" onclick="removeDevice(this)">×</button>
+                <button class="remove-device" onclick="removeDevice(this)" data-min-role="admin">×</button>
             </div>
             <div class="device-status offline"></div>
         </div>`;
-
     container.insertAdjacentHTML('beforeend', cardHTML);
     document.getElementById('device-name').value = '';
     document.getElementById('device-ip').value = '';
 }
 
-// Remove dispositivo da lista
 function removeDevice(el) {
     const card = el.closest('.device-card');
     if (card) card.remove();
 }
 
-// Filtra histórico por intervalo de datas
+// ─── HISTÓRICO ────────────────────────────────────────────────────────────────
+
 function filterHistory() {
     const startDate = document.getElementById('start-date').value;
     const endDate = document.getElementById('end-date').value;
@@ -204,114 +312,160 @@ function filterHistory() {
 
             const tbody = document.getElementById('history-data');
             if (!tbody) return;
-
             tbody.innerHTML = Object.entries(byDate)
                 .sort(([a], [b]) => b.localeCompare(a))
                 .map(([date, items]) => {
                     const formatted = date !== 'desconhecido'
                         ? new Date(date + 'T12:00:00').toLocaleDateString('pt-BR')
                         : '-';
-                    return `<tr>
-                        <td>${formatted}</td>
-                        <td>${items.length}</td>
-                        <td>${items.length}</td>
-                        <td>-</td>
-                        <td>-</td>
-                    </tr>`;
+                    return `<tr><td>${formatted}</td><td>${items.length}</td><td>${items.length}</td><td>-</td><td>-</td></tr>`;
                 })
                 .join('') || '<tr><td colspan="5">Nenhum registro encontrado.</td></tr>';
         })
         .catch(err => console.error('Erro ao filtrar histórico:', err));
 }
 
-// Inicializa o gráfico de atendimentos no histórico
 function initChart() {
     fetch('/appointments/stats')
         .then(res => res.json())
         .then(data => {
             const canvas = document.getElementById('attendanceChart');
             if (!canvas) return;
-
             if (canvas._chartInstance) canvas._chartInstance.destroy();
-
             canvas._chartInstance = new Chart(canvas, {
                 type: 'bar',
                 data: {
                     labels: data.map(d => new Date(d.date + 'T12:00:00').toLocaleDateString('pt-BR')),
-                    datasets: [{
-                        label: 'Atendimentos Concluídos',
-                        data: data.map(d => d.count),
-                        backgroundColor: '#075e54',
-                        borderRadius: 4
-                    }]
+                    datasets: [{ label: 'Atendimentos Concluídos', data: data.map(d => d.count), backgroundColor: '#075e54', borderRadius: 4 }]
                 },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-                }
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
             });
         })
         .catch(err => console.error('Erro ao carregar gráfico:', err));
 }
 
-// Navegação entre sub-páginas de configuração
-// Mapeamento: botão 0=Conexão→pág 1, 1=Almoço→pág 0, 2=Dispositivos→pág 2, 3=Histórico→pág 3
-const CONFIG_PAGE_MAP = [1, 0, 2, 3];
+// ─── NAVEGAÇÃO DE CONFIGURAÇÕES ───────────────────────────────────────────────
 
 function showConfigPage(pageIndex) {
     const pages = document.querySelectorAll('#config .page');
     const buttons = document.querySelectorAll('#config .config-card .button');
+    const MAP = [1, 0, 2, 3, 4];
 
     pages.forEach((page, i) => { page.hidden = i !== pageIndex; });
-    buttons.forEach((btn, i) => { btn.classList.toggle('active', CONFIG_PAGE_MAP[i] === pageIndex); });
+    buttons.forEach((btn, i) => { btn.classList.toggle('active', MAP[i] === pageIndex); });
 
     if (pageIndex === 3) initChart();
+    if (pageIndex === 4) loadUsersPanel();
 }
 
-// Inicialização ao carregar a página
+// ─── PAINEL DE USUÁRIOS (ADMIN) ───────────────────────────────────────────────
+
+function loadUsersPanel() {
+    fetch('/users')
+        .then(res => res.json())
+        .then(users => {
+            const tbody = document.getElementById('users-table-body');
+            if (!tbody) return;
+            tbody.innerHTML = users.map(u => `
+                <tr>
+                    <td>${escapeHtml(u.name)}</td>
+                    <td>${escapeHtml(u.username)}</td>
+                    <td><span class="role-badge role-${u.role}">${ROLE_LABEL[u.role] || u.role}</span></td>
+                    <td><span class="${u.active ? 'status-active' : 'status-inactive'}">${u.active ? 'Ativo' : 'Inativo'}</span></td>
+                    <td>
+                        ${u.id !== currentUser.id && u.active
+                            ? `<button class="config-btn btn-danger btn-small" onclick="deactivateUser('${u.id}')">Desativar</button>`
+                            : ''}
+                    </td>
+                </tr>`).join('') || '<tr><td colspan="5">Nenhum usuário encontrado.</td></tr>';
+        })
+        .catch(err => console.error('Erro ao carregar usuários:', err));
+}
+
+function saveNewUser() {
+    const name = document.getElementById('new-user-name').value.trim();
+    const username = document.getElementById('new-user-username').value.trim();
+    const password = document.getElementById('new-user-password').value;
+    const role = document.getElementById('new-user-role').value;
+    const errorEl = document.getElementById('new-user-error');
+
+    if (!name || !username || !password || !role) {
+        errorEl.textContent = 'Preencha todos os campos.';
+        errorEl.hidden = false;
+        return;
+    }
+
+    fetch('/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, username, password, role })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            errorEl.hidden = true;
+            document.getElementById('new-user-name').value = '';
+            document.getElementById('new-user-username').value = '';
+            document.getElementById('new-user-password').value = '';
+            loadUsersPanel();
+        } else {
+            errorEl.textContent = data.message;
+            errorEl.hidden = false;
+        }
+    })
+    .catch(err => console.error('Erro ao criar usuário:', err));
+}
+
+function deactivateUser(id) {
+    if (!confirm('Desativar este funcionário?')) return;
+    fetch(`/users/${id}`, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(data => { if (data.success) loadUsersPanel(); })
+        .catch(err => console.error('Erro ao desativar usuário:', err));
+}
+
+// ─── DOM CONTENT LOADED ───────────────────────────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Remove cards de demonstração hardcoded do HTML
-    ['#pendentes .cards-container', '#atendimento .cards-container', '#concluidos .cards-container'].forEach(sel => {
-        const el = document.querySelector(sel);
-        if (el) el.innerHTML = '';
-    });
-    updateCounters();
+    // Login form
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value;
+            const errorEl = document.getElementById('login-error');
+            const submitBtn = loginForm.querySelector('button[type="submit"]');
 
-    // Carrega atendimentos pendentes persistidos
-    fetch('/appointments')
-        .then(res => res.json())
-        .then(data => {
-            data.forEach(a => addAppointmentCard(a));
-            updateCounters();
-        })
-        .catch(err => console.error('Erro ao carregar atendimentos:', err));
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Entrando...';
 
-    // Carrega atendimentos concluídos persistidos
-    fetch('/completed-appointments')
-        .then(res => res.json())
-        .then(data => {
-            data.forEach(a => addCompletedCard(a));
-            updateCounters();
-        })
-        .catch(err => console.error('Erro ao carregar concluídos:', err));
+            try {
+                const res = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    currentUser = data.user;
+                    errorEl.hidden = true;
+                    hideLoginOverlay();
+                    initApp();
+                } else {
+                    errorEl.textContent = data.message;
+                    errorEl.hidden = false;
+                }
+            } catch {
+                errorEl.textContent = 'Erro de conexão. Verifique a rede.';
+                errorEl.hidden = false;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Entrar';
+            }
+        });
+    }
 
-    // Wiring dos botões de navegação da config
-    document.querySelectorAll('#config .config-card .button').forEach((btn, i) => {
-        btn.addEventListener('click', () => showConfigPage(CONFIG_PAGE_MAP[i]));
-    });
-
-    // Status inicial do WhatsApp
-    fetch('/connection-status')
-        .then(res => res.json())
-        .then(data => updateConnectionUI(data.status))
-        .catch(() => {});
-
-    // Poll de status a cada 30 segundos
-    setInterval(() => {
-        fetch('/connection-status')
-            .then(res => res.json())
-            .then(data => updateConnectionUI(data.status))
-            .catch(() => {});
-    }, 30000);
+    // Inicia verificação de autenticação
+    initAuth();
 });
