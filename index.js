@@ -368,12 +368,30 @@ app.post('/disconnect-whatsapp', auth.authMiddleware, auth.requireRole('admin'),
     try {
         if (whatsappClient) {
             await whatsappClient.close();
-            connectionState = 'disconnected';
+            whatsappClient = null;
         }
+        connectionState = 'disconnected';
+        io.emit('connection_status', { status: 'disconnected' });
         res.json({ success: true });
     } catch (e) {
         console.error('Erro ao desconectar WhatsApp:', e);
         res.status(500).json({ success: false });
+    }
+});
+
+app.post('/reconnect-whatsapp', auth.authMiddleware, auth.requireRole('admin'), async (req, res) => {
+    try {
+        if (whatsappClient) {
+            try { await whatsappClient.close(); } catch {}
+            whatsappClient = null;
+        }
+        connectionState = 'reconnecting';
+        io.emit('connection_status', { status: 'reconnecting' });
+        res.json({ success: true, message: 'Reconexão iniciada' });
+        setTimeout(initWhatsApp, 1500);
+    } catch (e) {
+        console.error('Erro ao reconectar WhatsApp:', e);
+        res.status(500).json({ success: false, message: e.message });
     }
 });
 
@@ -464,24 +482,41 @@ process.on('unhandledRejection', (reason) => {
 // 10. Inicialização
 auth.initDefaultAdmin().catch(console.error);
 
-wppconnect.create({
-    session: process.env.SESSION_NAME || 'sessionName',
-    catchQR: (base64Qr) => {
-        connectionState = 'qr_waiting';
-        io.emit('qr_code', { qr: base64Qr });
-    },
-    statusFind: (status) => {
-        connectionState = status;
-        io.emit('connection_status', { status });
-    },
-    logQR: false,
-    updatesEnabled: false,
-}).then((client) => {
-    whatsappClient = client;
-    connectionState = 'connected';
-    io.emit('connection_status', { status: 'isLogged' });
-    start(client);
-}).catch((error) => console.error('Erro ao iniciar WPPConnect:', error));
+function initWhatsApp() {
+    wppconnect.create({
+        session: process.env.SESSION_NAME || 'sessionName',
+        catchQR: (base64Qr) => {
+            connectionState = 'qr_waiting';
+            io.emit('qr_code', { qr: base64Qr });
+        },
+        statusFind: (status) => {
+            connectionState = status;
+            io.emit('connection_status', { status });
+        },
+        logQR: false,
+        updatesEnabled: false,
+    }).then((client) => {
+        whatsappClient = client;
+        connectionState = 'connected';
+        io.emit('connection_status', { status: 'isLogged' });
+        start(client);
+    }).catch((error) => {
+        if (error && error.message && error.message.includes('Auto Close')) {
+            // QR expirou sem ser escaneado — atualiza UI para estado desconectado
+            connectionState = 'disconnected';
+            whatsappClient = null;
+            io.emit('connection_status', { status: 'disconnected' });
+            console.log('[WhatsApp] QR Code expirou. Aguardando reconexão manual.');
+        } else {
+            console.error('Erro ao iniciar WPPConnect:', error);
+            connectionState = 'disconnected';
+            whatsappClient = null;
+            io.emit('connection_status', { status: 'disconnected' });
+        }
+    });
+}
+
+initWhatsApp();
 
 server.listen(PORT, '0.0.0.0', () => {
     const ips = getLocalIPs();

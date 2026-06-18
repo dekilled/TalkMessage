@@ -148,15 +148,28 @@ function updateConnectionUI(status) {
     const indicator = document.getElementById('status-indicator');
     const qrContainer = document.getElementById('qr-container');
     const connectedMessage = document.getElementById('connected-message');
+    const reconnectSection = document.getElementById('reconnect-section');
 
     if (connectedStatuses.includes(status)) {
         if (indicator) indicator.textContent = 'Conectado';
         if (qrContainer) qrContainer.style.display = 'none';
         if (connectedMessage) connectedMessage.style.display = 'flex';
-    } else if (['notLogged', 'browserClose', 'disconnected', 'qr_waiting'].includes(status)) {
-        if (indicator) indicator.textContent = 'Desconectado';
+        if (reconnectSection) reconnectSection.style.display = 'none';
+    } else if (status === 'qr_waiting') {
+        if (indicator) indicator.textContent = 'Aguardando leitura do QR Code...';
         if (qrContainer) qrContainer.style.display = 'flex';
         if (connectedMessage) connectedMessage.style.display = 'none';
+        if (reconnectSection) reconnectSection.style.display = 'none';
+    } else if (status === 'reconnecting') {
+        if (indicator) indicator.textContent = 'Reconectando...';
+        if (qrContainer) qrContainer.style.display = 'none';
+        if (connectedMessage) connectedMessage.style.display = 'none';
+        if (reconnectSection) reconnectSection.style.display = 'none';
+    } else if (['notLogged', 'browserClose', 'disconnected'].includes(status)) {
+        if (indicator) indicator.textContent = 'Desconectado';
+        if (qrContainer) qrContainer.style.display = 'none';
+        if (connectedMessage) connectedMessage.style.display = 'none';
+        if (reconnectSection) reconnectSection.style.display = 'flex';
     } else {
         if (indicator) indicator.textContent = 'Verificando...';
     }
@@ -167,6 +180,15 @@ function disconnectWhatsApp() {
         .then(res => res.json())
         .then(() => updateConnectionUI('disconnected'))
         .catch(err => console.error('Erro ao desconectar:', err));
+}
+
+function reconnectWhatsApp() {
+    fetch('/reconnect-whatsapp', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) updateConnectionUI('reconnecting');
+        })
+        .catch(err => console.error('Erro ao reconectar:', err));
 }
 
 // ─── CARDS DE ATENDIMENTO ─────────────────────────────────────────────────────
