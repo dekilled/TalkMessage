@@ -127,14 +127,6 @@ function initApp() {
         .then(data => { data.forEach(a => addCompletedCard(a)); updateCounters(); })
         .catch(err => console.error('Erro ao carregar concluídos:', err));
 
-    // Wiring dos botões da config (mapeamento botão → página)
-    // Botões: 0=Conexão, 1=Almoço, 2=Dispositivos, 3=Histórico, 4=Usuários
-    // Páginas: 0=Almoço, 1=Conexão, 2=Dispositivos, 3=Histórico, 4=Usuários
-    const CONFIG_PAGE_MAP = [1, 0, 2, 3, 4];
-    document.querySelectorAll('#config .config-card .button').forEach((btn, i) => {
-        btn.addEventListener('click', () => showConfigPage(CONFIG_PAGE_MAP[i]));
-    });
-
     // Status inicial do WhatsApp
     fetch('/connection-status')
         .then(res => res.json())
@@ -347,15 +339,36 @@ function initChart() {
 // ─── NAVEGAÇÃO DE CONFIGURAÇÕES ───────────────────────────────────────────────
 
 function showConfigPage(pageIndex) {
-    const pages = document.querySelectorAll('#config .page');
-    const buttons = document.querySelectorAll('#config .config-card .button');
-    const MAP = [1, 0, 2, 3, 4];
+    document.querySelectorAll('.config-panel').forEach(p => {
+        p.classList.toggle('active', parseInt(p.dataset.panel) === pageIndex);
+    });
+    document.querySelectorAll('.config-nav-item').forEach(item => {
+        item.classList.toggle('active', parseInt(item.dataset.page) === pageIndex);
+    });
 
-    pages.forEach((page, i) => { page.hidden = i !== pageIndex; });
-    buttons.forEach((btn, i) => { btn.classList.toggle('active', MAP[i] === pageIndex); });
+    if (window.innerWidth <= 768) {
+        const nav = document.getElementById('config-nav');
+        const content = document.getElementById('config-content');
+        if (nav) nav.classList.add('slide-out');
+        if (content) content.classList.add('visible-mobile');
+
+        const activeItem = document.querySelector(`.config-nav-item[data-page="${pageIndex}"]`);
+        if (activeItem) {
+            const titleEl = activeItem.querySelector('.config-nav-title-text');
+            const backLabel = document.getElementById('config-back-label');
+            if (titleEl && backLabel) backLabel.textContent = titleEl.textContent;
+        }
+    }
 
     if (pageIndex === 3) initChart();
     if (pageIndex === 4) loadUsersPanel();
+}
+
+function showConfigNav() {
+    const nav = document.getElementById('config-nav');
+    const content = document.getElementById('config-content');
+    if (nav) nav.classList.remove('slide-out');
+    if (content) content.classList.remove('visible-mobile');
 }
 
 // ─── PAINEL DE USUÁRIOS (ADMIN) ───────────────────────────────────────────────
