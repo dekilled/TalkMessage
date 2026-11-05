@@ -25,9 +25,9 @@
     
     <title>Sistema de Atendimento</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="vendor/chart.umd.min.js"></script>
     
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.4.4/qrcode.js" integrity="sha512-oxrVyBhqnzQ0BzuM0A/6dEIk0alz0p4SpDRaWvtuUoarIc8rnL5lVniHG5Dp21MRFojcQcmKHjaskNXhSaUPPw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="vendor/qrcode.min.js"></script>
     <script src="vendor/socket.io.min.js"></script>
     <script src="api.js"></script>
 
@@ -169,6 +169,7 @@
                 <li class="active" data-section="pendentes" onclick="switchSection('pendentes')">Pendentes<!--<a href="#pendentes">Pendentes</a>--></li>
                 <li data-section="atendimento" onclick="switchSection('atendimento')">Em Atendimento<!--<a href="#atendimento">Em Atendimento</a>--></li>
                 <li data-section="concluidos" onclick="switchSection('concluidos')">Concluídos<!--<a href="#concluidos">Concluídos</a>--></li>
+                <li data-section="pacientes" onclick="switchSection('pacientes')">Pacientes</li>
             </ul>
             <div class="menu-footer">
                 <ul class="menu">
@@ -457,6 +458,18 @@
                                         <span class="resolution">Encaminhado para consulta</span>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="pacientes" label="Pacientes" class="content-section">
+                        <div class="patients-layout">
+                            <aside class="patients-sidebar">
+                                <input id="patients-search" type="search" placeholder="Buscar por nome, telefone, CPF ou cartão SUS" autocomplete="off">
+                                <ul id="patients-list" class="patients-list"></ul>
+                            </aside>
+                            <div id="patient-detail" class="patient-detail">
+                                <p class="patient-empty">Selecione um paciente para ver a ficha.</p>
                             </div>
                         </div>
                     </section>
@@ -766,6 +779,13 @@
                 </svg>
                 <span>Concluídos</span>
             </a>
+            <a href="#" class="nav-item" data-section="pacientes">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <span>Pacientes</span>
+            </a>
         </nav>
     <!--<div>-->
     <script>
@@ -820,6 +840,7 @@
             }
 
             // Mostra a seção selecionada
+            if (sectionId === 'pacientes' && window.Patients) { Patients.init(); Patients.search(document.getElementById('patients-search').value); }
             const selectedSection = document.getElementById(sectionId);
             if (selectedSection) {
                 selectedSection.style.display = 'block';
@@ -971,6 +992,7 @@
             }, 400);
         }
     </script>
+    <script src="patients.js"></script>
     <script src="script.js"></script>
 
 </body>

@@ -47,6 +47,10 @@ let disableAutoReply = [];
 let appointments = db.loadAppointments();
 let activeAppointments = db.loadActive();
 let completedAppointments = db.loadCompleted();
+// Pacientes que receberam o pedido de avaliação: phoneKey -> id do atendimento
+const pendingRatings = new Map();
+
+const toWid = (phone) => `${db.phoneKey(phone)}@c.us`;
 
 // Arrays de mensagens de boas-vindas
 const welcomeMessages = [
@@ -146,20 +150,38 @@ function start(client) {
         io.emit('typing', { from });
 
         // Se está em atendimento via chat da ferramenta, roteia a mensagem para o chat
-        const activeChatAppt = activeAppointments.find(a => a.phone === from && a.channel === 'chat');
+        const fromKey = db.phoneKey(from);
+        const activeChatAppt = activeAppointments.find(a => db.phoneKey(a.phone) === fromKey && a.channel === 'chat');
         if (activeChatAppt) {
             const chatMsg = {
-                phone: from,
+                phone: fromKey,
                 from: 'patient',
                 sender: message.pushname || from,
                 text: message.body,
                 timestamp: new Date().toISOString()
             };
-            const msgs = db.loadChat(from);
-            msgs.push(chatMsg);
-            db.saveChat(from, msgs);
+            db.addChatMessage(chatMsg);
             io.emit('chat_message', chatMsg);
             return;
+        }
+
+        // Resposta à pesquisa de satisfação (nota de 1 a 5)
+        if (pendingRatings.has(fromKey)) {
+            const attendanceId = pendingRatings.get(fromKey);
+            const answer = message.body.trim();
+            if (/^[1-5]$/.test(answer)) {
+                pendingRatings.delete(fromKey);
+                const rating = Number(answer);
+                db.setRating(attendanceId, rating);
+                const appt = completedAppointments.find(a => a.id === attendanceId);
+                if (appt) appt.rating = rating;
+                io.emit('rating_received', { id: attendanceId, phone: fromKey, rating });
+                await client.sendText(from, rating >= 4
+                    ? 'Muito obrigada pela avaliação! 💙 Ficamos felizes em ajudar.'
+                    : 'Obrigada pela avaliação! Vamos usar sua opinião para melhorar nosso atendimento.');
+                return;
+            }
+            pendingRatings.delete(fromKey); // respondeu outra coisa: segue o fluxo normal
         }
 
         if (disableAutoReply.includes(from) && autoReplyEnabled) {
@@ -187,7 +209,11 @@ function start(client) {
         try {
             switch (currentUserState.step) {
                 case 'initial':
-                    const welcomeMessage = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
+                    const known = db.getPatient(from);
+                    if (known && known.name) currentUserState.data.knownName = known.name;
+                    const welcomeMessage = known && known.name
+                        ? `Olá, ${known.name.split(' ')[0]}! Que bom ter você de volta. Como posso ajudar?`
+                        : welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
                     await client.startTyping(from);
                     await delayRandom();
                     await client.sendText(from, welcomeMessage);
@@ -235,6 +261,17 @@ function start(client) {
                         return;
                     }
 
+                    if (currentUserState.data.knownName) {
+                        currentUserState.data.name = currentUserState.data.knownName;
+                        currentUserState.data.date = currentUserState.data.contactDate;
+                        currentUserState.data.time = currentUserState.data.contactTime;
+                        await client.startTyping(from);
+                        await delayRandom();
+                        await client.sendText(from, descriptionSolicitationMessages[Math.floor(Math.random() * descriptionSolicitationMessages.length)]);
+                        await client.stopTyping(from);
+                        currentUserState.step = 'awaiting_description';
+                        break;
+                    }
                     await client.startTyping(from);
                     await delayRandom();
                     const nameMessage = nameSolicitationMessages[Math.floor(Math.random() * nameSolicitationMessages.length)];
@@ -263,8 +300,9 @@ function start(client) {
                     const conclusionMessage = conclusionMessages[Math.floor(Math.random() * conclusionMessages.length)];
                     await client.sendText(from, conclusionMessage);
                     await client.stopTyping(from);
-                    currentUserState.step = 'initial';
-                    saveAppointment({ ...currentUserState.data });
+                    const { knownName, ...apptData } = currentUserState.data;
+                    delete userStates[from];
+                    saveAppointment(apptData);
                     break;
             }
         } catch (error) {
@@ -426,12 +464,10 @@ app.post('/chat/:phone/message', auth.authMiddleware, async (req, res) => {
             text,
             timestamp: new Date().toISOString()
         };
-        const msgs = db.loadChat(phone);
-        msgs.push(msg);
-        db.saveChat(phone, msgs);
+        db.addChatMessage(msg);
 
         if (whatsappClient) {
-            try { await whatsappClient.sendText(phone, text); } catch (e) {
+            try { await whatsappClient.sendText(toWid(phone), text); } catch (e) {
                 console.error('Erro ao enviar mensagem WhatsApp:', e.message);
             }
         }
@@ -476,6 +512,15 @@ app.post('/complete-appointment', auth.authMiddleware, async (req, res) => {
         }
 
         io.emit('appointment_completed', completedAppointment);
+
+        // Pesquisa de satisfação via WhatsApp
+        if (whatsappClient && req.body.askRating !== false) {
+            pendingRatings.set(db.phoneKey(phone), completedAppointment.id);
+            whatsappClient.sendText(toWid(phone),
+                'Seu atendimento foi finalizado. Como você avalia nosso atendimento?\n' +
+                'Responda com um número de 1 a 5:\n1 - Péssimo\n2 - Ruim\n3 - Regular\n4 - Bom\n5 - Ótimo'
+            ).catch(e => console.error('Erro ao enviar pesquisa de satisfação:', e.message));
+        }
         res.json({ success: true, completedAppointment });
     } catch (error) {
         console.error('Erro ao completar atendimento:', error);
@@ -549,6 +594,7 @@ app.put('/users/:id', auth.authMiddleware, auth.requireRole('admin'), async (req
     }
     if (password) {
         users[idx].password = await bcrypt.hash(password, 10);
+        db.tokens.removeForUser(id);
     }
     db.saveUsers(users);
     const { password: _, ...safeUser } = users[idx];
@@ -567,7 +613,55 @@ app.delete('/users/:id', auth.authMiddleware, auth.requireRole('admin'), (req, r
     }
     users[idx].active = false;
     db.saveUsers(users);
+    db.tokens.removeForUser(id);
     res.json({ success: true });
+});
+
+// 10. Rotas — Pacientes (ficha, histórico, exames e pedidos)
+app.get('/patients', auth.authMiddleware, (req, res) => {
+    res.json(db.searchPatients(req.query.q || ''));
+});
+
+app.get('/patients/:phone', auth.authMiddleware, (req, res) => {
+    const profile = db.getPatientProfile(req.params.phone);
+    if (!profile) return res.status(404).json({ success: false, message: 'Paciente não encontrado.' });
+    res.json(profile);
+});
+
+app.put('/patients/:phone', auth.authMiddleware, (req, res) => {
+    if (!db.phoneKey(req.params.phone)) return res.status(400).json({ success: false, message: 'Telefone inválido.' });
+    const patient = db.updatePatient(req.params.phone, req.body || {});
+    io.emit('patient_updated', patient);
+    res.json({ success: true, patient });
+});
+
+app.post('/patients/:phone/records', auth.authMiddleware, (req, res) => {
+    const { type, title } = req.body || {};
+    if (!db.RECORD_TYPES.includes(type) || !title) {
+        return res.status(400).json({ success: false, message: `Informe título e tipo (${db.RECORD_TYPES.join(', ')}).` });
+    }
+    const record = db.addRecord(req.params.phone, req.body, req.session.user.name);
+    io.emit('record_updated', record);
+    res.json({ success: true, record });
+});
+
+app.put('/records/:id', auth.authMiddleware, (req, res) => {
+    if (req.body.type && !db.RECORD_TYPES.includes(req.body.type)) {
+        return res.status(400).json({ success: false, message: 'Tipo inválido.' });
+    }
+    const record = db.updateRecord(Number(req.params.id), req.body || {});
+    if (!record) return res.status(404).json({ success: false, message: 'Registro não encontrado.' });
+    io.emit('record_updated', record);
+    res.json({ success: true, record });
+});
+
+app.delete('/records/:id', auth.authMiddleware, auth.requireRole('supervisor', 'admin'), (req, res) => {
+    if (!db.deleteRecord(Number(req.params.id))) return res.status(404).json({ success: false });
+    res.json({ success: true });
+});
+
+app.get('/ratings/stats', auth.authMiddleware, auth.requireRole('supervisor', 'admin'), (req, res) => {
+    res.json(db.ratingStats());
 });
 
 // Error handler global

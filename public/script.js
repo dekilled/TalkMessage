@@ -111,6 +111,13 @@ function initApp() {
         if (chatCurrentPhone === data.phone) closeChatModal();
     });
 
+    if (window.Patients) Patients.bindSocket(socket);
+
+    socket.on('rating_received', (data) => {
+        const card = document.querySelector(`#concluidos .card[data-phone="${data.phone}"] .rating-slot`);
+        if (card) card.innerHTML = ratingStars(data.rating);
+    });
+
     socket.on('chat_message', (data) => {
         if (chatCurrentPhone === data.phone) appendChatMessage(data);
     });
@@ -198,6 +205,10 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
+function ratingStars(n) {
+    return n ? `<span class="stars" title="Nota ${n}">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span>` : '';
+}
+
 function addAppointmentCard(data) {
     const container = document.querySelector('#pendentes .cards-container');
     if (!container) return;
@@ -217,10 +228,13 @@ function addAppointmentCard(data) {
                     <span class="description">${escapeHtml(data.description)}</span>
                     <span class="timestamp">Contato: ${escapeHtml(data.time)}</span>
                 </div>
+                <div class="card-actions">
+                <button class="card-action-btn btn-record" onclick="openPatient('${escapeHtml(data.phone)}')">📋 Ficha</button>
                 <button class="card-action-btn btn-start"
                     onclick="openChannelModal('${escapeHtml(data.phone)}','${escapeHtml(data.name)}','${escapeHtml(data.service)}')">
                     Iniciar Atendimento
                 </button>
+                </div>
             </div>
         </div>`;
 
@@ -261,6 +275,7 @@ function addActiveCard(data) {
                     <span class="attendant-tag">👤 ${escapeHtml(data.attendant || '')}</span>
                 </div>
                 <div class="card-actions">
+                    <button class="card-action-btn btn-record" onclick="openPatient('${escapeHtml(data.phone)}')">📋 Ficha</button>
                     ${chatBtn}
                     <button class="card-action-btn btn-finish"
                         onclick="openFinishModal('${escapeHtml(data.phone)}','${escapeHtml(data.name)}')">
@@ -307,6 +322,10 @@ function addCompletedCard(data) {
                 <div class="completion-info">
                     <span class="${statusClass[st] || ''}">${statusLabel[st] || st}</span>
                     ${data.attendantNotes ? `<span class="resolution">${escapeHtml(data.attendantNotes)}</span>` : ''}
+                </div>
+                <div class="card-actions">
+                    <span class="rating-slot">${ratingStars(data.rating)}</span>
+                    <button class="card-action-btn btn-record" onclick="openPatient('${escapeHtml(data.phone)}')">📋 Ficha</button>
                 </div>
             </div>
         </div>`;

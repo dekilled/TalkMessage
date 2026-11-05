@@ -6,21 +6,18 @@ const crypto = require('crypto');
 
 // Tokens para clientes empacotados (APK/EXE), que não podem usar cookie de sessão
 const TOKEN_TTL = 8 * 60 * 60 * 1000; // 8 horas, igual à sessão
-const tokens = new Map(); // token -> { user, expires }
+// Tokens ficam no SQLite: sobrevivem a reinícios do servidor
 
 function issueToken(user) {
     const token = crypto.randomBytes(32).toString('hex');
-    tokens.set(token, { user, expires: Date.now() + TOKEN_TTL });
+    db.tokens.save(token, user, Date.now() + TOKEN_TTL);
     return token;
 }
 
-function revokeToken(token) { tokens.delete(token); }
+function revokeToken(token) { if (token) db.tokens.remove(token); }
 
 function userFromToken(token) {
-    const entry = token && tokens.get(token);
-    if (!entry) return null;
-    if (entry.expires < Date.now()) { tokens.delete(token); return null; }
-    return entry.user;
+    return token ? db.tokens.get(token) : null;
 }
 
 function bearer(req) {
