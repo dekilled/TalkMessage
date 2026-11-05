@@ -2,6 +2,70 @@
 const bcrypt = require('bcryptjs');
 const db = require('./db');
 
+const crypto = require('crypto');
+
+// Tokens para clientes empacotados (APK/EXE), que não podem usar cookie de sessão
+const TOKEN_TTL = 8 * 60 * 60 * 1000; // 8 horas, igual à sessão
+const tokens = new Map(); // token -> { user, expires }
+
+function issueToken(user) {
+    const token = crypto.randomBytes(32).toString('hex');
+    tokens.set(token, { user, expires: Date.now() + TOKEN_TTL });
+    return token;
+}
+
+function revokeToken(token) { tokens.delete(token); }
+
+function userFromToken(token) {
+    const entry = token && tokens.get(token);
+    if (!entry) return null;
+    if (entry.expires < Date.now()) { tokens.delete(token); return null; }
+    return entry.user;
+}
+
+function bearer(req) {
+    const h = req.headers.authorization || '';
+    return h.startsWith('Bearer ') ? h.slice(7) : null;
+}
+
+// Deve vir ANTES do express-session: com Bearer válido, cria uma "sessão" leve
+// por requisição (o express-session ignora requisições que já têm req.session).
+function tokenMiddleware(req, res, next) {
+    const token = bearer(req);
+    const user = userFromToken(token);
+    if (user) {
+        req.session = { user, token, destroy(cb) { revokeToken(token); cb && cb(); } };
+    }
+    next();
+}
+
+// CORS só para origens da rede local e dos apps empacotados
+function isLanOrigin(origin) {
+    if (!origin || origin === 'null') return true;
+    try {
+        const { protocol, hostname } = new URL(origin);
+        if (['capacitor:', 'ionic:', 'file:', 'app:'].includes(protocol)) return true;
+        return hostname === 'localhost' || hostname === '127.0.0.1' ||
+            /^10\./.test(hostname) || /^192\.168\./.test(hostname) ||
+            /^172\.(1[6-9]|2\d|3[01])\./.test(hostname);
+    } catch { return false; }
+}
+
+function corsMiddleware(req, res, next) {
+    const origin = req.headers.origin;
+    if (origin && isLanOrigin(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Vary', 'Origin');
+    } else if (origin) {
+        return res.status(403).json({ success: false, message: 'Origem não permitida.' });
+    }
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+}
+
 const ROLE_LEVEL = { atendente: 1, supervisor: 2, admin: 3 };
 
 function authMiddleware(req, res, next) {
@@ -40,4 +104,7 @@ async function initDefaultAdmin() {
     console.log(`[auth] Admin padrão criado -> usuário: ${username} / senha: ${password} (troque após o primeiro login!)`);
 }
 
-module.exports = { authMiddleware, requireRole, initDefaultAdmin, ROLE_LEVEL };
+module.exports = {
+    authMiddleware, requireRole, initDefaultAdmin, ROLE_LEVEL,
+    issueToken, revokeToken, userFromToken, tokenMiddleware, corsMiddleware, isLanOrigin
+};

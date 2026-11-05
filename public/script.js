@@ -8,8 +8,9 @@ const ROLE_LABEL = { atendente: 'Atendente', supervisor: 'Supervisor', admin: 'A
 // ─── AUTENTICAÇÃO ────────────────────────────────────────────────────────────
 
 async function initAuth() {
+    if (!(await API.ensureServer())) { showLoginOverlay(); return; }
     try {
-        const res = await fetch('/auth/me');
+        const res = await API.fetch('/auth/me');
         if (!res.ok) { showLoginOverlay(); return; }
         currentUser = await res.json();
         hideLoginOverlay();
@@ -51,8 +52,9 @@ function applyPermissions(role) {
 }
 
 function logout() {
-    fetch('/auth/logout', { method: 'POST' })
+    API.fetch('/auth/logout', { method: 'POST' })
         .then(() => {
+            API.setToken(null);
             if (socket) { socket.disconnect(); socket = null; }
             currentUser = null;
             // Limpa dados da tela
@@ -80,7 +82,7 @@ function initApp() {
     updateCounters();
 
     // Conecta Socket.IO
-    socket = io();
+    socket = API.socket();
 
     socket.on('connect_error', (err) => {
         if (err.message === 'Não autorizado') {
@@ -129,29 +131,29 @@ function initApp() {
     });
 
     // Carrega dados persistidos
-    fetch('/appointments')
+    API.fetch('/appointments')
         .then(res => res.json())
         .then(data => { data.forEach(a => addAppointmentCard(a)); updateCounters(); })
         .catch(err => console.error('Erro ao carregar atendimentos:', err));
 
-    fetch('/active-appointments')
+    API.fetch('/active-appointments')
         .then(res => res.json())
         .then(data => { data.forEach(a => addActiveCard(a)); updateCounters(); })
         .catch(err => console.error('Erro ao carregar ativos:', err));
 
-    fetch('/completed-appointments')
+    API.fetch('/completed-appointments')
         .then(res => res.json())
         .then(data => { data.forEach(a => addCompletedCard(a)); updateCounters(); })
         .catch(err => console.error('Erro ao carregar concluídos:', err));
 
     // Status inicial do WhatsApp
-    fetch('/connection-status')
+    API.fetch('/connection-status')
         .then(res => res.json())
         .then(data => updateConnectionUI(data.status))
         .catch(() => {});
 
     setInterval(() => {
-        fetch('/connection-status')
+        API.fetch('/connection-status')
             .then(res => res.json())
             .then(data => updateConnectionUI(data.status))
             .catch(() => {});
@@ -180,7 +182,7 @@ function updateConnectionUI(status) {
 }
 
 function disconnectWhatsApp() {
-    fetch('/disconnect-whatsapp', { method: 'POST' })
+    API.fetch('/disconnect-whatsapp', { method: 'POST' })
         .then(res => res.json())
         .then(() => updateConnectionUI('disconnected'))
         .catch(err => console.error('Erro ao desconectar:', err));
@@ -331,7 +333,7 @@ function confirmStartAppointment(channel) {
     if (!pendingAppointment) return;
     closeChannelModal();
 
-    fetch('/start-appointment', {
+    API.fetch('/start-appointment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: pendingAppointment.phone, channel })
@@ -355,7 +357,7 @@ function openChatModal(phone, name) {
     document.getElementById('chat-messages').innerHTML = '';
     document.getElementById('chat-modal').style.display = 'flex';
 
-    fetch(`/chat/${phone}`)
+    API.fetch(`/chat/${phone}`)
         .then(res => res.json())
         .then(msgs => { msgs.forEach(appendChatMessage); })
         .catch(() => {});
@@ -387,7 +389,7 @@ function sendChatMessage() {
     if (!text || !chatCurrentPhone) return;
     input.value = '';
 
-    fetch(`/chat/${chatCurrentPhone}/message`, {
+    API.fetch(`/chat/${chatCurrentPhone}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })
@@ -435,7 +437,7 @@ function submitFinishAppointment() {
         return;
     }
 
-    fetch('/complete-appointment', {
+    API.fetch('/complete-appointment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: finishCurrentPhone, attendantNotes, completionStatus, completionTypes })
@@ -491,7 +493,7 @@ function filterHistory() {
     const startDate = document.getElementById('start-date').value;
     const endDate = document.getElementById('end-date').value;
 
-    fetch('/completed-appointments')
+    API.fetch('/completed-appointments')
         .then(res => res.json())
         .then(data => {
             let filtered = data;
@@ -521,7 +523,7 @@ function filterHistory() {
 }
 
 function initChart() {
-    fetch('/appointments/stats')
+    API.fetch('/appointments/stats')
         .then(res => res.json())
         .then(data => {
             const canvas = document.getElementById('attendanceChart');
@@ -577,7 +579,7 @@ function showConfigNav() {
 // ─── PAINEL DE USUÁRIOS (ADMIN) ───────────────────────────────────────────────
 
 function loadUsersPanel() {
-    fetch('/users')
+    API.fetch('/users')
         .then(res => res.json())
         .then(users => {
             const tbody = document.getElementById('users-table-body');
@@ -611,7 +613,7 @@ function saveNewUser() {
         return;
     }
 
-    fetch('/users', {
+    API.fetch('/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, username, password, role })
@@ -634,7 +636,7 @@ function saveNewUser() {
 
 function deactivateUser(id) {
     if (!confirm('Desativar este funcionário?')) return;
-    fetch(`/users/${id}`, { method: 'DELETE' })
+    API.fetch(`/users/${id}`, { method: 'DELETE' })
         .then(res => res.json())
         .then(data => { if (data.success) loadUsersPanel(); })
         .catch(err => console.error('Erro ao desativar usuário:', err));
@@ -657,13 +659,14 @@ document.addEventListener('DOMContentLoaded', () => {
             submitBtn.textContent = 'Entrando...';
 
             try {
-                const res = await fetch('/auth/login', {
+                const res = await API.fetch('/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
                 const data = await res.json();
                 if (data.success) {
+                    if (data.token) API.setToken(data.token);
                     currentUser = data.user;
                     errorEl.hidden = true;
                     hideLoginOverlay();

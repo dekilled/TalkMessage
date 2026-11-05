@@ -21,9 +21,16 @@ const sessionMiddleware = session({
     cookie: { httpOnly: true, sameSite: 'lax', maxAge: 8 * 60 * 60 * 1000 } // 8 horas
 });
 
+app.use(auth.corsMiddleware);
+app.use(auth.tokenMiddleware);
 app.use(sessionMiddleware);
 
-const io = require('socket.io')(server);
+const io = require('socket.io')(server, {
+    cors: {
+        origin: (origin, cb) => cb(null, auth.isLanOrigin(origin)),
+        credentials: true
+    }
+});
 io.engine.use(sessionMiddleware);
 
 const PORT = process.env.PORT || 3001;
@@ -268,6 +275,11 @@ function start(client) {
 
 // 6. Socket.IO — autenticação via sessão
 io.use((socket, next) => {
+    const tokenUser = auth.userFromToken(socket.handshake.auth && socket.handshake.auth.token);
+    if (tokenUser) {
+        socket.user = tokenUser;
+        return next();
+    }
     const sess = socket.request.session;
     if (sess && sess.user) {
         socket.user = sess.user;
@@ -277,6 +289,11 @@ io.use((socket, next) => {
 });
 
 // 7. Rotas — Públicas (sem autenticação)
+// Usado pelos clientes (APK/EXE) para localizar o servidor na rede
+app.get('/api/ping', (req, res) => {
+    res.json({ app: 'talkmessage', version: require('./package.json').version });
+});
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -291,8 +308,10 @@ app.post('/auth/login', async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.password))) {
         return res.status(401).json({ success: false, message: 'Usuário ou senha incorretos.' });
     }
-    req.session.user = { id: user.id, name: user.name, role: user.role, username: user.username };
-    res.json({ success: true, user: req.session.user });
+    const sessionUser = { id: user.id, name: user.name, role: user.role, username: user.username };
+    req.session.user = sessionUser;
+    // Token para clientes empacotados (cookies não atravessam origens)
+    res.json({ success: true, user: sessionUser, token: auth.issueToken(sessionUser) });
 });
 
 app.post('/auth/logout', (req, res) => {
