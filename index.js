@@ -8,6 +8,7 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const db = require('./db');
 const auth = require('./auth');
+const access = require('./access');
 
 // 2. Configurações iniciais
 const app = express();
@@ -21,13 +22,18 @@ const sessionMiddleware = session({
     cookie: { httpOnly: true, sameSite: 'lax', maxAge: 8 * 60 * 60 * 1000 } // 8 horas
 });
 
+// Bloqueio por rede vem antes de tudo (inclusive dos arquivos do painel)
+app.use(access.networkMiddleware);
 app.use(auth.corsMiddleware);
 app.use(auth.tokenMiddleware);
 app.use(sessionMiddleware);
+// Dispositivo + horário de expediente para usuários logados
+app.use(access.requestMiddleware);
 
 const io = require('socket.io')(server, {
     cors: {
-        origin: (origin, cb) => cb(null, auth.isLanOrigin(origin)),
+        // A rede já é filtrada pelo access.js; aqui só barramos sites de fora
+        origin: (origin, cb) => cb(null, auth.isLanOrigin(origin) || access.ipAllowed(new URL(origin).hostname, access.getConfig())),
         credentials: true
     }
 });
@@ -298,7 +304,9 @@ function start(client) {
                     await client.startTyping(from);
                     await delayRandom();
                     const conclusionMessage = conclusionMessages[Math.floor(Math.random() * conclusionMessages.length)];
-                    await client.sendText(from, conclusionMessage);
+                    const hours = access.scheduleStatus();
+                    await client.sendText(from, hours.open ? conclusionMessage
+                        : `${conclusionMessage}\n\nNo momento estamos fora do horário de atendimento (${access.scheduleText(access.getConfig())}). Sua solicitação ficará na fila e será atendida no próximo expediente.`);
                     await client.stopTyping(from);
                     const { knownName, ...apptData } = currentUserState.data;
                     delete userStates[from];
@@ -313,6 +321,13 @@ function start(client) {
 
 // 6. Socket.IO — autenticação via sessão
 io.use((socket, next) => {
+    const ip = access.clientIp(socket.handshake);
+    const netDenied = access.check({ ip, stage: 'network' });
+    if (netDenied) return next(new Error(netDenied.code));
+    next();
+});
+
+io.use((socket, next) => {
     const tokenUser = auth.userFromToken(socket.handshake.auth && socket.handshake.auth.token);
     if (tokenUser) {
         socket.user = tokenUser;
@@ -325,6 +340,31 @@ io.use((socket, next) => {
     }
     next(new Error('Não autorizado'));
 });
+
+// Dispositivo + horário também valem para o tempo real
+const socketDenied = (socket) => access.check({
+    ip: access.clientIp(socket.handshake),
+    deviceId: socket.handshake.auth && socket.handshake.auth.deviceId,
+    userAgent: socket.handshake.headers['user-agent'],
+    user: socket.user
+});
+io.use((socket, next) => {
+    const denied = socketDenied(socket);
+    if (denied) return next(new Error(denied.code));
+    next();
+});
+
+// A cada minuto derruba quem perdeu o acesso (fim do expediente, aparelho bloqueado…)
+function enforceAccessOnSockets() {
+    for (const socket of io.of('/').sockets.values()) {
+        const denied = socketDenied(socket);
+        if (denied) {
+            socket.emit('access_blocked', denied);
+            socket.disconnect(true);
+        }
+    }
+}
+setInterval(enforceAccessOnSockets, 60 * 1000);
 
 // 7. Rotas — Públicas (sem autenticação)
 // Usado pelos clientes (APK/EXE) para localizar o servidor na rede
@@ -347,6 +387,11 @@ app.post('/auth/login', async (req, res) => {
         return res.status(401).json({ success: false, message: 'Usuário ou senha incorretos.' });
     }
     const sessionUser = { id: user.id, name: user.name, role: user.role, username: user.username };
+    const denied = access.check({
+        ip: access.clientIp(req), deviceId: access.deviceIdOf(req),
+        userAgent: req.headers['user-agent'], user: sessionUser
+    });
+    if (denied) return res.status(denied.status).json({ success: false, ...denied });
     req.session.user = sessionUser;
     // Token para clientes empacotados (cookies não atravessam origens)
     res.json({ success: true, user: sessionUser, token: auth.issueToken(sessionUser) });
@@ -614,6 +659,70 @@ app.delete('/users/:id', auth.authMiddleware, auth.requireRole('admin'), (req, r
     users[idx].active = false;
     db.saveUsers(users);
     db.tokens.removeForUser(id);
+    res.json({ success: true });
+});
+
+// 11. Rotas — Controle de acesso (rede, dispositivos e horário)
+app.get('/access/status', (req, res) => {
+    res.json(access.publicStatus());
+});
+
+app.get('/access/whoami', auth.authMiddleware, (req, res) => {
+    res.json({ ip: access.clientIp(req), deviceId: access.deviceIdOf(req) });
+});
+
+app.get('/access', auth.authMiddleware, auth.requireRole('admin'), (req, res) => {
+    res.json({
+        config: access.getConfig(),
+        status: access.publicStatus(),
+        devices: access.listDevices(),
+        you: { ip: access.clientIp(req), deviceId: access.deviceIdOf(req) },
+        serverIps: getLocalIPs()
+    });
+});
+
+app.put('/access', auth.authMiddleware, auth.requireRole('admin'), (req, res) => {
+    try {
+        const config = access.saveConfig(req.body || {});
+        enforceAccessOnSockets();
+        io.emit('access_changed', access.publicStatus());
+        res.json({ success: true, config });
+    } catch (e) {
+        res.status(400).json({ success: false, message: e.message });
+    }
+});
+
+// Liberação temporária fora do horário: { minutes } | { endOfDay: true } | { cancel: true }
+app.post('/access/override', auth.authMiddleware, auth.requireRole('admin'), (req, res) => {
+    const { minutes, endOfDay, cancel } = req.body || {};
+    let until = null;
+    if (!cancel) {
+        if (endOfDay) { until = new Date(); until.setHours(23, 59, 59, 0); }
+        else {
+            const m = Number(minutes);
+            if (!Number.isFinite(m) || m <= 0 || m > 24 * 60) return res.status(400).json({ success: false, message: 'Informe de 1 a 1440 minutos.' });
+            until = new Date(Date.now() + m * 60000);
+        }
+    }
+    access.saveConfig({ overrideUntil: until ? until.toISOString() : null });
+    if (cancel) enforceAccessOnSockets();
+    io.emit('access_changed', access.publicStatus());
+    res.json({ success: true, status: access.publicStatus() });
+});
+
+app.put('/devices/:id', auth.authMiddleware, auth.requireRole('admin'), (req, res) => {
+    try {
+        if (!access.updateDevice(req.params.id, req.body || {})) return res.status(404).json({ success: false, message: 'Dispositivo não encontrado.' });
+        enforceAccessOnSockets();
+        res.json({ success: true });
+    } catch (e) {
+        res.status(400).json({ success: false, message: e.message });
+    }
+});
+
+app.delete('/devices/:id', auth.authMiddleware, auth.requireRole('admin'), (req, res) => {
+    if (!access.removeDevice(req.params.id)) return res.status(404).json({ success: false });
+    enforceAccessOnSockets();
     res.json({ success: true });
 });
 

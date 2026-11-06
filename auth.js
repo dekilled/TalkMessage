@@ -50,10 +50,13 @@ function isLanOrigin(origin) {
 
 function corsMiddleware(req, res, next) {
     const origin = req.headers.origin;
-    if (origin && isLanOrigin(origin)) {
+    // Mesma origem (página servida pelo próprio servidor) sempre passa
+    let sameOrigin = false;
+    try { sameOrigin = !!origin && new URL(origin).host === req.headers.host; } catch {}
+    if (origin && (sameOrigin || isLanOrigin(origin))) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Device-Id');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
         res.setHeader('Vary', 'Origin');
     } else if (origin) {

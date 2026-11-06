@@ -508,8 +508,8 @@
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 </div>
                 <div class="config-nav-label">
-                    <span class="config-nav-title-text">Dispositivos</span>
-                    <span class="config-nav-desc">Dispositivos autorizados</span>
+                    <span class="config-nav-title-text">Acesso</span>
+                    <span class="config-nav-desc">Rede, horário e aparelhos</span>
                 </div>
                 <svg class="config-nav-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
             </div>
@@ -617,41 +617,57 @@
                 </div>
             </div>
 
-            <!-- Panel 2: Dispositivos -->
+            <!-- Panel 2: Acesso e dispositivos (admin) -->
             <div class="config-panel" data-panel="2">
-                <h3 class="config-panel-title">Dispositivos Autorizados</h3>
+                <h3 class="config-panel-title">Acesso e Dispositivos</h3>
 
-                <div class="device-input-group config-block">
-                    <div class="input-row">
-                        <input type="text" id="device-name" placeholder="Nome do dispositivo" class="device-input">
-                        <input type="text" id="device-ip" placeholder="Endereço IP (ex: 192.168.1.100)" class="device-input">
-                        <select id="device-type" class="device-input">
-                            <option value="computer">Computador</option>
-                            <option value="mobile">Celular</option>
-                        </select>
-                    </div>
-                    <div class="input-hint">
-                        Formato: http://IP:3000 (ex: http://192.168.1.100:3000)
-                    </div>
-                    <button onclick="addDevice()" class="config-btn add-device-btn" data-min-role="admin">
-                        Adicionar Dispositivo
-                    </button>
-                </div>
+                <div class="config-block access-status" id="access-status-box">Carregando…</div>
 
-                <div class="devices-list config-block">
-                    <h4>Dispositivos Conectados</h4>
-                    <div class="device-cards" id="devices-container">
-                        <div class="device-card primary">
-                            <div class="device-icon">💻</div>
-                            <div class="device-info">
-                                <h5>Computador Principal (Recepção)</h5>
-                                <span class="device-ip">http://localhost:3000</span>
-                                <span class="device-badge primary">Principal</span>
-                            </div>
-                            <div class="device-status online"></div>
+                <form id="access-form" class="access-form">
+                    <div class="config-block">
+                        <label class="access-switch access-master">
+                            <input type="checkbox" name="disabled">
+                            <span><strong>Desativar todos os bloqueios</strong><small>Libera qualquer rede, aparelho e horário. Use só em emergência.</small></span>
+                        </label>
+                    </div>
+
+                    <div class="config-block">
+                        <h4>🕒 Horário de expediente</h4>
+                        <label class="access-switch"><input type="checkbox" name="enforceSchedule"><span>Bloquear acesso fora do horário</span></label>
+                        <div class="access-days" id="access-days"></div>
+                        <div class="access-row">
+                            <label>Início<input type="time" name="start" required></label>
+                            <label>Fim<input type="time" name="end" required></label>
+                        </div>
+                        <label class="access-switch"><input type="checkbox" name="adminBypassSchedule"><span>Administrador pode entrar fora do horário</span></label>
+                        <div class="access-override">
+                            <span>Liberar agora, fora do horário:</span>
+                            <button type="button" data-override="60">1 hora</button>
+                            <button type="button" data-override="120">2 horas</button>
+                            <button type="button" data-override="eod">Até o fim do dia</button>
+                            <button type="button" data-override="cancel" class="danger">Encerrar liberação</button>
                         </div>
                     </div>
-                </div>
+
+                    <div class="config-block">
+                        <h4>🌐 Rede da secretaria</h4>
+                        <label class="access-switch"><input type="checkbox" name="enforceNetwork"><span>Aceitar somente as faixas de rede abaixo</span></label>
+                        <label class="access-field">Faixas permitidas (uma por linha)
+                            <textarea name="allowedNetworks" rows="3" spellcheck="false"></textarea>
+                        </label>
+                        <p class="input-hint" id="access-net-hint"></p>
+                    </div>
+
+                    <div class="config-block">
+                        <h4>📱 Dispositivos autorizados</h4>
+                        <label class="access-switch"><input type="checkbox" name="enforceDevices"><span>Somente aparelhos aprovados podem usar o sistema</span></label>
+                        <p class="input-hint">Todo aparelho que abre o sistema aparece aqui. Aprove os computadores e celulares da secretaria. O administrador sempre consegue entrar.</p>
+                        <div class="device-cards" id="devices-container"></div>
+                    </div>
+
+                    <button type="submit" class="config-btn btn-primary">Salvar regras de acesso</button>
+                    <span class="access-saved" hidden>Salvo ✓</span>
+                </form>
             </div>
 
             <!-- Panel 3: Histórico -->
@@ -747,7 +763,6 @@
             </div>
             <div class="device-actions-popup">
                 <button class="cancel-device-removal" onclick="popupClose()">Cancelar</button>
-                <button class="remove-device2" onclick="removeDevice(this)">Apagar dispositivo</button>
             </div>
         </div>
         <!-- Bottom Navigation --> 
@@ -993,6 +1008,7 @@
         }
     </script>
     <script src="patients.js"></script>
+    <script src="access-admin.js"></script>
     <script src="script.js"></script>
 
 </body>

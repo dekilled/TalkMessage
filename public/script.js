@@ -475,37 +475,6 @@ function submitFinishAppointment() {
 
 // ─── DISPOSITIVOS ─────────────────────────────────────────────────────────────
 
-function addDevice() {
-    const name = document.getElementById('device-name').value.trim();
-    const ip = document.getElementById('device-ip').value.trim();
-    const type = document.getElementById('device-type').value;
-
-    if (!name || !ip) { alert('Preencha o nome e o endereço IP do dispositivo.'); return; }
-
-    const icon = type === 'mobile' ? '📱' : '💻';
-    const container = document.getElementById('devices-container');
-    const cardHTML = `
-        <div class="device-card">
-            <div class="device-icon">${icon}</div>
-            <div class="device-info">
-                <h5>${escapeHtml(name)}</h5>
-                <span class="device-ip">http://${escapeHtml(ip)}:3000</span>
-            </div>
-            <div class="device-actions">
-                <button class="remove-device" onclick="removeDevice(this)" data-min-role="admin">×</button>
-            </div>
-            <div class="device-status offline"></div>
-        </div>`;
-    container.insertAdjacentHTML('beforeend', cardHTML);
-    document.getElementById('device-name').value = '';
-    document.getElementById('device-ip').value = '';
-}
-
-function removeDevice(el) {
-    const card = el.closest('.device-card');
-    if (card) card.remove();
-}
-
 // ─── HISTÓRICO ────────────────────────────────────────────────────────────────
 
 function filterHistory() {
@@ -563,6 +532,7 @@ function initChart() {
 // ─── NAVEGAÇÃO DE CONFIGURAÇÕES ───────────────────────────────────────────────
 
 function showConfigPage(pageIndex) {
+    if (pageIndex === 2 && window.AccessAdmin) AccessAdmin.load();
     document.querySelectorAll('.config-panel').forEach(p => {
         p.classList.toggle('active', parseInt(p.dataset.panel) === pageIndex);
     });
@@ -706,4 +676,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Inicia verificação de autenticação
     initAuth();
+});
+
+// Bloqueio de acesso (rede, aparelho ou horário): encerra o tempo real
+window.addEventListener('tm:access-denied', () => {
+    if (socket) { socket.disconnect(); socket = null; }
 });

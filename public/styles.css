@@ -2340,3 +2340,53 @@ body {
     .patient-kpis div { min-width: 0; }
     .patient-kpis span { font-size: 0.6rem; text-align: center; }
 }
+
+/* ─── Controle de acesso ───────────────────────────────────────────────── */
+.tm-access-blocked { position: fixed; inset: 0; z-index: 99999; background: rgba(20, 28, 36, .85); display: none; align-items: center; justify-content: center; padding: 20px; }
+.tm-access-card { background: #fff; border-radius: 16px; padding: 28px 24px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+.tm-access-icon { font-size: 2.6rem; }
+.tm-access-card h2 { color: #075e54; margin: 8px 0; font-size: 1.25rem; }
+.tm-access-card p { color: #555; line-height: 1.45; }
+.tm-device-code strong { font-family: monospace; font-size: 1.15rem; letter-spacing: 2px; color: #222; }
+.tm-access-card button { margin-top: 12px; padding: 10px 22px; border: none; border-radius: 8px; background: #075e54; color: #fff; font-weight: 600; cursor: pointer; }
+
+.access-form { display: flex; flex-direction: column; gap: 14px; }
+.access-form h4 { margin: 0 0 10px; }
+.access-status { display: flex; flex-direction: column; gap: 4px; font-weight: 500; border-left: 4px solid #28a745; }
+.access-status small { color: #777; font-weight: 400; }
+.access-status.access-closed { border-left-color: #dc3545; }
+.access-status.access-warn { border-left-color: #f5a623; background: #fff8ec; }
+.access-switch { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; cursor: pointer; }
+.access-switch input { width: 18px; height: 18px; margin-top: 2px; accent-color: #075e54; flex-shrink: 0; }
+.access-switch small { display: block; color: #888; font-weight: 400; }
+.access-master { color: #b02a37; }
+.access-days { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+.day-chip input { display: none; }
+.day-chip span { display: inline-block; padding: 6px 12px; border-radius: 16px; border: 1px solid #ccd; cursor: pointer; user-select: none; }
+.day-chip input:checked + span { background: #075e54; border-color: #075e54; color: #fff; }
+.access-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.access-row label, .access-field { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: #666; }
+.access-row input, .access-field textarea { padding: 8px 10px; border: 1px solid #d6dbe1; border-radius: 8px; font: inherit; }
+.access-field textarea { font-family: monospace; }
+.access-override { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e3e3e3; font-size: .9rem; }
+.access-override button, .device-actions button { padding: 6px 12px; border-radius: 8px; border: 1px solid #075e54; background: #fff; color: #075e54; cursor: pointer; font-weight: 600; }
+.access-override button.danger, .device-actions button.danger { border-color: #dc3545; color: #dc3545; }
+.device-actions button.ok { background: #075e54; color: #fff; }
+.access-saved { color: #28a745; font-weight: 600; }
+#devices-container { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+#devices-container .device-card { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; border-left: 4px solid #f5a623; }
+#devices-container .device-approved { border-left-color: #28a745; }
+#devices-container .device-blocked { border-left-color: #dc3545; opacity: .75; }
+.device-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.device-name-input { border: 1px solid transparent; border-radius: 6px; padding: 4px 6px; font-weight: 600; font-size: .95rem; background: transparent; }
+.device-name-input:hover, .device-name-input:focus { border-color: #d6dbe1; background: #fff; }
+.device-meta { font-size: .78rem; color: #999; }
+.device-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.device-badge.badge-pending { background: #fff4e0; color: #b7791f; }
+.device-badge.badge-approved { background: #e8f6ec; color: #218838; }
+.device-badge.badge-blocked { background: #fdecee; color: #b02a37; }
+.device-badge { padding: 3px 10px; border-radius: 10px; font-size: .75rem; font-weight: 600; }
+@media (max-width: 768px) {
+    #devices-container .device-card { grid-template-columns: auto 1fr; }
+    .device-actions { grid-column: span 2; justify-content: flex-start; }
+}

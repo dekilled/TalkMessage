@@ -5,6 +5,47 @@
 (function () {
     const KEY_SERVER = 'tm_server';
     const KEY_TOKEN = 'tm_token';
+    const KEY_DEVICE = 'tm_device';
+
+    // Identificador fixo deste aparelho (usado na aprovação de dispositivos pelo admin)
+    function deviceId() {
+        let id = localStorage.getItem(KEY_DEVICE);
+        if (!id) {
+            const rnd = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+                : Date.now().toString(36) + Math.random().toString(36).slice(2);
+            id = 'dev-' + rnd;
+            localStorage.setItem(KEY_DEVICE, id);
+        }
+        return id;
+    }
+
+    const ACCESS_CODES = ['NETWORK_BLOCKED', 'DEVICE_PENDING', 'DEVICE_BLOCKED', 'DEVICE_UNKNOWN', 'OUT_OF_HOURS'];
+    const ACCESS_TITLES = {
+        NETWORK_BLOCKED: 'Fora da rede da secretaria',
+        DEVICE_PENDING: 'Aguardando aprovação',
+        DEVICE_BLOCKED: 'Dispositivo bloqueado',
+        DEVICE_UNKNOWN: 'Dispositivo não identificado',
+        OUT_OF_HOURS: 'Fora do horário de expediente'
+    };
+
+    function showBlocked(info) {
+        let el = document.getElementById('tm-access-blocked');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'tm-access-blocked';
+            el.className = 'tm-access-blocked';
+            document.body.appendChild(el);
+        }
+        const code = info.deviceId ? `<p class="tm-device-code">Código do aparelho: <strong>${String(info.deviceId).slice(-6).toUpperCase()}</strong></p>` : '';
+        el.innerHTML = `<div class="tm-access-card">
+            <div class="tm-access-icon">🔒</div>
+            <h2>${ACCESS_TITLES[info.code] || 'Acesso bloqueado'}</h2>
+            <p>${String(info.message || '').replace(/</g, '&lt;')}</p>${code}
+            <button type="button" id="tm-access-retry">Tentar novamente</button>
+        </div>`;
+        el.style.display = 'flex';
+        el.querySelector('#tm-access-retry').onclick = () => location.reload();
+    }
 
     const servedByServer = /^https?:$/.test(location.protocol) &&
         !['localhost', '127.0.0.1'].includes(location.hostname) ||
@@ -29,18 +70,40 @@
         fetch(path, opts = {}) {
             const headers = new Headers(opts.headers || {});
             if (this.token) headers.set('Authorization', 'Bearer ' + this.token);
+            headers.set('X-Device-Id', this.deviceId);
             return window.fetch(this.url(path), { ...opts, headers, credentials: 'include' })
                 .then(res => {
                     if (res.status === 401 && this.isClient) this.setToken(null);
+                    if (res.status === 403) {
+                        res.clone().json().then(d => { if (ACCESS_CODES.includes(d.code)) this.blocked(d); }).catch(() => {});
+                    }
                     return res;
                 });
         },
 
+        get deviceId() { return deviceId(); },
+
+        // Mostra a tela de bloqueio e avisa o app (ex.: para desconectar o socket)
+        blocked(info) {
+            showBlocked(info);
+            window.dispatchEvent(new CustomEvent('tm:access-denied', { detail: info }));
+        },
+
         socket() {
-            return io(this.base || undefined, {
+            const s = io(this.base || undefined, {
                 withCredentials: true,
-                auth: this.token ? { token: this.token } : {}
+                auth: { deviceId: this.deviceId, ...(this.token ? { token: this.token } : {}) }
             });
+            s.on('connect_error', (err) => {
+                if (ACCESS_CODES.includes(err.message)) {
+                    s.disconnect();
+                    // Busca a mensagem completa (com horários) pela API
+                    this.fetch('/auth/me').catch(() => {});
+                    if (err.message === 'NETWORK_BLOCKED') this.blocked({ code: err.message, message: 'Conecte-se à rede da secretaria.' });
+                }
+            });
+            s.on('access_blocked', (info) => this.blocked(info));
+            return s;
         },
 
         // Testa se há um servidor TalkMessage no endereço informado
