@@ -6,6 +6,7 @@
     const KEY_SERVER = 'tm_server';
     const KEY_TOKEN = 'tm_token';
     const KEY_DEVICE = 'tm_device';
+    const KEY_DEVICE_KEY = 'tm_device_key'; // chave secreta entregue pelo servidor
 
     // Identificador fixo deste aparelho (usado na aprovação de dispositivos pelo admin)
     function deviceId() {
@@ -19,13 +20,14 @@
         return id;
     }
 
-    const ACCESS_CODES = ['NETWORK_BLOCKED', 'DEVICE_PENDING', 'DEVICE_BLOCKED', 'DEVICE_UNKNOWN', 'DEVICE_IP_CHANGED', 'OUT_OF_HOURS'];
+    const ACCESS_CODES = ['NETWORK_BLOCKED', 'DEVICE_PENDING', 'DEVICE_BLOCKED', 'DEVICE_UNKNOWN', 'DEVICE_IP_CHANGED', 'DEVICE_KEY_INVALID', 'OUT_OF_HOURS'];
     const ACCESS_TITLES = {
         NETWORK_BLOCKED: 'Fora da rede da secretaria',
         DEVICE_PENDING: 'Aguardando aprovação',
         DEVICE_BLOCKED: 'Dispositivo bloqueado',
         DEVICE_UNKNOWN: 'Dispositivo não identificado',
         DEVICE_IP_CHANGED: 'O IP deste aparelho mudou',
+        DEVICE_KEY_INVALID: 'Chave do aparelho inválida',
         OUT_OF_HOURS: 'Fora do horário de expediente'
     };
 
@@ -75,8 +77,11 @@
             const headers = new Headers(opts.headers || {});
             if (this.token) headers.set('Authorization', 'Bearer ' + this.token);
             headers.set('X-Device-Id', this.deviceId);
+            if (this.deviceKey) headers.set('X-Device-Key', this.deviceKey);
             return window.fetch(this.url(path), { ...opts, headers, credentials: 'include' })
                 .then(res => {
+                    const k = res.headers.get('X-Device-Key');
+                    if (k) this.saveDeviceKey(k);
                     if (res.status === 401 && this.isClient) this.setToken(null);
                     if (res.status === 403) {
                         res.clone().json().then(d => {
@@ -90,6 +95,14 @@
         },
 
         get deviceId() { return deviceId(); },
+        get deviceKey() { return localStorage.getItem(KEY_DEVICE_KEY); },
+        // Guarda a chave nova e confirma ao servidor (sem desconectar)
+        saveDeviceKey(k) {
+            if (!k || k === this.deviceKey) return;
+            localStorage.setItem(KEY_DEVICE_KEY, k);
+            if (this._socket && this._socket.connected) this._socket.emit('device_key_ack', { key: k });
+            else this.fetch('/auth/me').catch(() => {});
+        },
 
         // Mostra a tela de bloqueio e avisa o app (ex.: para desconectar o socket)
         blocked(info) {
@@ -98,9 +111,17 @@
         },
 
         socket() {
+            // auth como função: a cada reconexão (ex.: IP mudou) envia a chave mais recente
             const s = io(this.base || undefined, {
                 withCredentials: true,
-                auth: { deviceId: this.deviceId, ...(this.token ? { token: this.token } : {}) }
+                auth: (cb) => cb({ deviceId: this.deviceId, deviceKey: this.deviceKey, ...(this.token ? { token: this.token } : {}) })
+            });
+            this._socket = s;
+            s.on('device_key', (d) => {
+                if (!d || !d.key) return;
+                localStorage.setItem(KEY_DEVICE_KEY, d.key);
+                s.emit('device_key_ack', { key: d.key });
+                this.fetch('/auth/me').catch(() => {}); // confirma também pela API
             });
             s.on('connect_error', (err) => {
                 if (ACCESS_CODES.includes(err.message)) {

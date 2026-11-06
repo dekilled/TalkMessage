@@ -345,6 +345,7 @@ io.use((socket, next) => {
 const socketDenied = (socket) => access.check({
     ip: access.clientIp(socket.handshake),
     deviceId: socket.handshake.auth && socket.handshake.auth.deviceId,
+    deviceKey: socket.handshake.auth && socket.handshake.auth.deviceKey,
     userAgent: socket.handshake.headers['user-agent'],
     user: socket.user
 });
@@ -358,6 +359,14 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
     const deviceId = socket.handshake.auth && socket.handshake.auth.deviceId;
     access.socketOnline(deviceId, +1);
+    // Chave nova (1ª autorização ou renovação de IP) entregue sem desconectar
+    const k = deviceId && access.keyToDeliver(deviceId, socket.handshake.auth.deviceKey);
+    if (k) socket.emit('device_key', { key: k });
+    socket.on('device_key_ack', (d) => {
+        if (!d || !d.key) return;
+        socket.handshake.auth.deviceKey = d.key; // a verificação periódica passa a usar a chave nova
+        access.keyToDeliver(deviceId, d.key);
+    });
     socket.on('disconnect', () => access.socketOnline(deviceId, -1));
 });
 access.events.on('devices', (e) => {
@@ -398,7 +407,7 @@ function warnShiftEnding() {
     if (shiftWarned.size > 50) shiftWarned.clear();
 }
 
-setInterval(() => { warnShiftEnding(); enforceAccessOnSockets(); }, 60 * 1000);
+setInterval(() => { access.tickPresence(); warnShiftEnding(); enforceAccessOnSockets(); }, 60 * 1000);
 
 // 7. Rotas — Públicas (sem autenticação)
 // Usado pelos clientes (APK/EXE) para localizar o servidor na rede
@@ -421,10 +430,13 @@ app.post('/auth/login', async (req, res) => {
         return res.status(401).json({ success: false, message: 'Usuário ou senha incorretos.' });
     }
     const sessionUser = { id: user.id, name: user.name, role: user.role, username: user.username };
+    const deviceId = access.deviceIdOf(req), deviceKey = access.deviceKeyOf(req);
     const denied = access.check({
-        ip: access.clientIp(req), deviceId: access.deviceIdOf(req),
+        ip: access.clientIp(req), deviceId, deviceKey,
         userAgent: req.headers['user-agent'], user: sessionUser
     });
+    const newDeviceKey = deviceId && access.keyToDeliver(deviceId, deviceKey);
+    if (newDeviceKey) res.setHeader('X-Device-Key', newDeviceKey);
     if (denied && denied.code === 'OUT_OF_HOURS' && denied.canAdjust) {
         // Fora do horário, mas dentro da janela permitida: entra só para ajustar o horário de hoje
         req.session.user = sessionUser;

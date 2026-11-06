@@ -24,8 +24,14 @@ CREATE TABLE IF NOT EXISTS devices (
     last_seen TEXT,
     created_at TEXT NOT NULL
 );`);
+// Minutos com o app aberto durante o expediente, por aparelho e dia
+db.sql.exec(`CREATE TABLE IF NOT EXISTS device_presence (
+    device_id TEXT NOT NULL, date TEXT NOT NULL, minutes INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (device_id, date))`);
+const crypto = require('crypto');
 // Colunas novas (bancos criados antes desta versão)
-for (const col of ['approved_ip TEXT', 'approved_by TEXT', 'approved_at TEXT']) {
+for (const col of ['approved_ip TEXT', 'approved_by TEXT', 'approved_at TEXT',
+    'device_key TEXT', 'auto_renewals INTEGER NOT NULL DEFAULT 0', 'last_renewal_at TEXT', 'last_renewal_from TEXT']) {
     try { db.sql.exec(`ALTER TABLE devices ADD COLUMN ${col}`); } catch { /* já existe */ }
 }
 
@@ -35,6 +41,9 @@ const DEFAULTS = {
     allowedNetworks: ['192.168.0.0/16', '10.0.0.0/8', '172.16.0.0/12'],
     enforceDevices: true,            // só aparelhos autorizados pelo servidor
     bindDeviceIp: true,              // o aparelho só vale no IP em que foi autorizado
+    autoRenewIp: true,               // renova sozinho o IP de aparelho de uso diário (ver canAutoRenew)
+    maxAutoRenewals: 3,              // depois disso, só o admin reautoriza
+    renewPresenceRatio: 0.7,         // % do último expediente com o app aberto
     enforceSchedule: true,
     // Expediente normal: dias da semana (0 = domingo) e períodos do dia
     schedule: { days: [1, 2, 3, 4, 5], periods: [{ start: '07:00', end: '11:00' }, { start: '13:00', end: '17:00' }] },
@@ -105,7 +114,8 @@ function saveConfig(patch) {
     if (patch.extraPeriods !== undefined) next.extraPeriods = parsePeriods(patch.extraPeriods);
     if (patch.attendantLimit !== undefined) next.attendantLimit = parsePeriods(patch.attendantLimit)[0] || cur.attendantLimit;
     if (typeof next.allowedNetworks === 'string') next.allowedNetworks = next.allowedNetworks.split(/[\s,]+/).filter(Boolean);
-    for (const k of ['disabled', 'enforceNetwork', 'enforceDevices', 'bindDeviceIp', 'enforceSchedule', 'adminBypassSchedule']) next[k] = !!next[k];
+    for (const k of ['disabled', 'enforceNetwork', 'enforceDevices', 'bindDeviceIp', 'autoRenewIp', 'enforceSchedule', 'adminBypassSchedule']) next[k] = !!next[k];
+    next.maxAutoRenewals = Math.max(0, Math.min(10, parseInt(next.maxAutoRenewals, 10) || 0));
     const err = validate(next);
     if (err) throw new Error(err);
     db.setSetting('access', next);
@@ -329,6 +339,11 @@ function updateDevice(deviceId, { name, status, ip }, by) {
     const dev = getDevice(deviceId);
     if (!dev) return false;
     const approving = status === 'approved' && dev.status !== 'approved';
+    // Autorização manual (ou novo IP pelo admin) zera as renovações e gera chave nova
+    if (approving || ip !== undefined) {
+        db.sql.prepare('UPDATE devices SET auto_renewals = 0, device_key = NULL WHERE device_id = ?').run(deviceId);
+        pendingKeys.delete(deviceId);
+    }
     db.sql.prepare(`UPDATE devices SET name = COALESCE(?, name), status = COALESCE(?, status),
             approved_ip = CASE WHEN ? IS NOT NULL THEN ? WHEN ? THEN ip ELSE approved_ip END,
             approved_by = CASE WHEN ? THEN ? ELSE approved_by END,
@@ -354,6 +369,99 @@ function addDeviceByIp({ name, ip, type }, by) {
     return getDevice('ip:' + ip);
 }
 
+// ─── Chave secreta do aparelho ───────────────────────────────────────────────
+// O servidor entrega uma chave ao aparelho autorizado; o app a envia em toda
+// requisição (X-Device-Key). Se alguém copiar só o código, não tem a chave.
+// A cada renovação automática de IP a chave é trocada e a antiga deixa de valer.
+// deviceId -> { key: nova, prev: anterior (ou null na 1ª entrega) }. Fica no banco:
+// se o servidor reiniciar no meio de uma troca, ninguém fica trancado para fora.
+const pendingKeys = {
+    _all: () => db.getSetting('pending_device_keys', {}),
+    get(id) { return this._all()[id]; },
+    has(id) { return !!this._all()[id]; },
+    set(id, v) { const a = this._all(); a[id] = v; db.setSetting('pending_device_keys', a); },
+    delete(id) { const a = this._all(); if (a[id]) { delete a[id]; db.setSetting('pending_device_keys', a); } }
+};
+const newKey = () => crypto.randomBytes(24).toString('hex');
+
+function issueKey(deviceId) {
+    const key = newKey();
+    const prev = (getDevice(deviceId) || {}).device_key || null;
+    db.sql.prepare('UPDATE devices SET device_key = ? WHERE device_id = ?').run(key, deviceId);
+    pendingKeys.set(deviceId, { key, prev });
+    return key;
+}
+
+// A chave apresentada vale? Na troca, aceita a anterior até o aparelho confirmar a nova.
+function keyValid(dev, presented) {
+    if (presented && presented === dev.device_key) return true;
+    const p = pendingKeys.get(dev.device_id);
+    if (!p) return false;
+    return p.prev ? presented === p.prev : !presented; // 1ª entrega: o aparelho ainda não tem chave
+}
+
+// Chave a ser entregue ao aparelho (cabeçalho X-Device-Key / evento 'device_key')
+function keyToDeliver(deviceId, presented) {
+    const p = pendingKeys.get(deviceId);
+    if (!p) return null;
+    if (presented === p.key) { pendingKeys.delete(deviceId); return null; } // aparelho já guardou
+    return p.key;
+}
+
+// ─── Presença (app aberto durante o expediente) ──────────────────────────────
+function tickPresence() {
+    const cfg = getConfig();
+    const st = scheduleStatus(cfg);
+    if (cfg.enforceSchedule && !st.open) return;
+    const today = dateKey();
+    const up = db.sql.prepare(`INSERT INTO device_presence (device_id, date, minutes) VALUES (?, ?, 1)
+        ON CONFLICT(device_id, date) DO UPDATE SET minutes = minutes + 1`);
+    for (const id of onlineSockets.keys()) up.run(id, today);
+    db.sql.prepare('DELETE FROM device_presence WHERE date < ?').run(dateKey(new Date(Date.now() - 60 * 86400000)));
+}
+
+const dayMinutes = (periods) => periods.reduce((s, p) => s + toMin(p.end) - toMin(p.start), 0);
+
+// Último dia trabalhado (antes de hoje) com expediente: o app ficou aberto o suficiente?
+function presenceCheck(deviceId, cfg = getConfig()) {
+    const rows = db.sql.prepare('SELECT date, minutes FROM device_presence WHERE device_id = ? AND date < ? ORDER BY date DESC LIMIT 7')
+        .all(deviceId, dateKey());
+    for (const r of rows) {
+        const { periods } = periodsFor(new Date(r.date + 'T12:00:00'), cfg);
+        const need = dayMinutes(periods);
+        if (!need) continue; // dia sem expediente: olha o anterior
+        return { ok: r.minutes >= need * cfg.renewPresenceRatio, date: r.date, minutes: r.minutes, need };
+    }
+    return { ok: false, date: null, minutes: 0, need: 0 };
+}
+
+const sameSubnet24 = (a, b) => a && b && a.split('.').slice(0, 3).join('.') === b.split('.').slice(0, 3).join('.');
+
+// Aparelho autorizado mudou de IP: pode renovar sozinho?
+function canAutoRenew(dev, ip, presentedKey, cfg = getConfig()) {
+    const reasons = [];
+    if (!cfg.autoRenewIp) reasons.push('renovação automática desativada');
+    if (dev.status !== 'approved' || !dev.approved_ip) reasons.push('aparelho não autorizado');
+    if (!dev.device_key || presentedKey !== dev.device_key) reasons.push('chave do aparelho não confere');
+    if (pendingKeys.has(dev.device_id)) reasons.push('troca de chave anterior ainda não confirmada');
+    if ((dev.auto_renewals || 0) >= cfg.maxAutoRenewals) reasons.push(`limite de ${cfg.maxAutoRenewals} renovações automáticas atingido`);
+    if (!sameSubnet24(dev.approved_ip, ip) || !ipAllowed(ip, cfg)) reasons.push('IP novo fora da mesma rede');
+    const pres = presenceCheck(dev.device_id, cfg);
+    if (!pres.ok) reasons.push(pres.date ? `app aberto só ${pres.minutes} de ${pres.need} min no expediente de ${pres.date}` : 'sem histórico de uso no expediente');
+    return { ok: !reasons.length, reasons, presence: pres };
+}
+
+function autoRenew(dev, ip) {
+    db.sql.prepare(`UPDATE devices SET approved_ip = ?, auto_renewals = auto_renewals + 1,
+        last_renewal_at = ?, last_renewal_from = ? WHERE device_id = ?`).run(ip, now(), dev.approved_ip, dev.device_id);
+    issueKey(dev.device_id);
+    lastTouch.delete(dev.device_id);
+    const updated = getDevice(dev.device_id);
+    console.log(`[aparelhos] ${dev.name || dev.device_id}: IP renovado automaticamente ${dev.approved_ip} → ${ip} (${updated.auto_renewals}/${getConfig().maxAutoRenewals})`);
+    events.emit('devices', { type: 'auto_renewed', device: updated, from: dev.approved_ip });
+    return updated;
+}
+
 function removeDevice(deviceId) {
     lastTouch.delete(deviceId);
     const ok = db.sql.prepare('DELETE FROM devices WHERE device_id = ?').run(deviceId).changes > 0;
@@ -366,7 +474,7 @@ function removeDevice(deviceId) {
 // Rotas que a atendente pode usar mesmo fora do horário (para corrigir o horário de hoje)
 const SCHEDULE_PATHS = /^\/(schedule(\/today|\/special\/\d{4}-\d{2}-\d{2})?|auth\/me)$/;
 
-function check({ ip, deviceId, userAgent, user, stage, path }) {
+function check({ ip, deviceId, deviceKey, userAgent, user, stage, path }) {
     const cfg = getConfig();
     if (cfg.disabled || isLocalhost(ip)) return null;
 
@@ -385,7 +493,16 @@ function check({ ip, deviceId, userAgent, user, stage, path }) {
         if (dev.status !== 'approved') {
             return { status: 403, code: 'DEVICE_PENDING', message: `Este dispositivo (IP ${ip}) ainda não foi autorizado. Peça ao administrador para autorizá-lo no computador central.`, deviceId, ip };
         }
+        // Primeira vez depois de autorizado: entrega a chave do aparelho
+        if (!dev.device_key) { issueKey(deviceId); }
+        else if (!keyValid(dev, deviceKey)) {
+            // Chave errada ou ausente: pode ser uma cópia do código do aparelho
+            return { status: 403, code: 'DEVICE_KEY_INVALID', message: 'A chave de segurança deste aparelho não confere. Peça ao administrador para autorizá-lo novamente.', deviceId, ip };
+        }
         if (cfg.bindDeviceIp && dev.approved_ip && dev.approved_ip !== ip) {
+            const renew = canAutoRenew(dev, ip, deviceKey, cfg);
+            if (renew.ok) { autoRenew(dev, ip); return null; }
+            if (cfg.autoRenewIp) console.log(`[aparelhos] ${dev.name || deviceId}: IP mudou ${dev.approved_ip} → ${ip}, sem renovação automática: ${renew.reasons.join('; ')}`);
             return { status: 403, code: 'DEVICE_IP_CHANGED', message: `Este dispositivo foi autorizado no IP ${dev.approved_ip}, mas agora está no IP ${ip}. Peça ao administrador para reautorizá-lo.`, deviceId, ip };
         }
     } else if (deviceId) {
@@ -425,7 +542,10 @@ function requestMiddleware(req, res, next) {
     // /auth/login é verificado na própria rota (depois de saber quem é o usuário)
     if (!user && req.path !== '/auth/login') return next();
     if (req.path === '/auth/login') return next();
-    const denied = check({ ip: clientIp(req), deviceId: deviceIdOf(req), userAgent: req.headers['user-agent'], user, path: req.path });
+    const deviceId = deviceIdOf(req), deviceKey = String(req.headers['x-device-key'] || '') || null;
+    const denied = check({ ip: clientIp(req), deviceId, deviceKey, userAgent: req.headers['user-agent'], user, path: req.path });
+    const k = deviceId && keyToDeliver(deviceId, deviceKey);
+    if (k) res.setHeader('X-Device-Key', k);
     if (!denied) return next();
     res.status(denied.status).json({ success: false, ...denied });
 }
@@ -460,5 +580,6 @@ module.exports = {
     listSpecialDays, setSpecialDay, todayAction, withinAttendantWindow, mergePeriods, hhmm, removeSpecialDay, periodsFor, dateKey, periodsText,
     check, clientIp, deviceIdOf, ipAllowed, parseCidr,
     networkMiddleware, requestMiddleware,
-    listDevices, updateDevice, removeDevice, addDeviceByIp, socketOnline, events
+    listDevices, updateDevice, removeDevice, addDeviceByIp, socketOnline, events,
+    keyToDeliver, tickPresence, presenceCheck, canAutoRenew, deviceKeyOf: (req) => String(req.headers['x-device-key'] || '') || null
 };

@@ -32,6 +32,7 @@
         return m < 1 ? 'agora' : m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.round(m / 60)} h` : fmt(iso);
     };
 
+    let maxRenewals = 3;
     function renderDevices(devices, you, serverIps) {
         const el = document.getElementById('devices-container');
         const approved = devices.filter(d => d.status === 'approved');
@@ -63,7 +64,8 @@
                 <div class="device-info">
                     <input class="device-name-input" value="${esc(d.name || '')}" placeholder="Dar um nome (ex: Recepção 1)">
                     <span class="device-ip">${ipInfo}${d.preauthorized ? '' : ` · código <strong>${esc(d.device_id.slice(-6).toUpperCase())}</strong>`}${d.device_id === you.deviceId ? ' · <em>este aparelho</em>' : ''}</span>
-                    <span class="device-meta">${d.online ? '🟢 online agora' : 'visto ' + ago(d.last_seen)}${d.last_user ? ' · ' + esc(d.last_user) : ''}</span>
+                    <span class="device-meta">${d.online ? '🟢 online agora' : 'visto ' + ago(d.last_seen)}${d.last_user ? ' · ' + esc(d.last_user) : ''}${d.status === 'approved' && !d.preauthorized ? ` · renovações automáticas: ${d.auto_renewals || 0}/${maxRenewals}` : ''}</span>
+                    ${d.last_renewal_at ? `<span class="device-meta renewed">↻ IP renovado ${ago(d.last_renewal_at)} (${esc(d.last_renewal_from)} → ${esc(d.approved_ip)})</span>` : ''}
                 </div>
                 <div class="device-actions">
                     <span class="device-badge badge-${d.status}">${STATUS[d.status]}</span>
@@ -78,7 +80,9 @@
 
     function fillForm(cfg) {
         const f = document.getElementById('access-form');
-        for (const k of ['disabled', 'enforceSchedule', 'adminBypassSchedule', 'enforceNetwork', 'enforceDevices', 'bindDeviceIp']) f.elements[k].checked = !!cfg[k];
+        for (const k of ['disabled', 'enforceSchedule', 'adminBypassSchedule', 'enforceNetwork', 'enforceDevices', 'bindDeviceIp', 'autoRenewIp']) f.elements[k].checked = !!cfg[k];
+        f.elements.maxAutoRenewals.value = cfg.maxAutoRenewals;
+        maxRenewals = cfg.maxAutoRenewals;
         const txt = (ps) => ps.map(p => `${p.start}-${p.end}`).join(', ');
         f.elements.periods.value = txt(cfg.schedule.periods);
         f.elements.extraPeriods.value = txt(cfg.extraPeriods);
@@ -94,6 +98,7 @@
             const data = await json('/access');
             fillForm(data.config);
             renderStatus(data.status, data.you);
+            fillForm(data.config); // garante maxRenewals antes de desenhar a lista
             renderDevices(data.devices, data.you, data.serverIps);
             document.getElementById('access-net-hint').textContent =
                 `Endereço do servidor: ${data.serverIps.map(ip => ip + ':' + (location.port || '3001')).join(', ') || '—'}. O computador central sempre tem acesso.`;
@@ -120,6 +125,8 @@
                     enforceNetwork: f.enforceNetwork.checked,
                     enforceDevices: f.enforceDevices.checked,
                     bindDeviceIp: f.bindDeviceIp.checked,
+                    autoRenewIp: f.autoRenewIp.checked,
+                    maxAutoRenewals: f.maxAutoRenewals.value,
                     allowedNetworks: f.allowedNetworks.value,
                     schedule: { days, periods: f.periods.value },
                     extraPeriods: f.extraPeriods.value,
@@ -184,6 +191,9 @@
     function bindSocket(socket) {
         socket.on('devices_changed', (e) => {
             const open = document.getElementById('devices-container')?.offsetParent;
+            if (e.type === 'auto_renewed' && e.device && window.Schedule && Schedule.toast) {
+                Schedule.toast(`↻ <strong>${esc(e.device.name || 'Aparelho')}</strong> mudou de IP (${esc(e.from)} → ${esc(e.device.approved_ip)}) e foi renovado automaticamente (${e.device.auto_renewals}/${maxRenewals}).`, { timeout: 20000 });
+            }
             if (open) { clearTimeout(reloadTimer); reloadTimer = setTimeout(load, 300); }
             if (e.type === 'new' && e.device && window.Schedule && Schedule.toast) {
                 Schedule.toast(`📱 Novo aparelho aguardando autorização (IP ${esc(e.device.ip)})`, {

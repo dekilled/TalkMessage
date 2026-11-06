@@ -667,6 +667,11 @@
                         </div>
                         <label class="access-switch"><input type="checkbox" name="enforceDevices"><span><strong>Somente aparelhos autorizados pelo servidor</strong><small>Aparelho novo aparece aqui como pendente até você autorizar.</small></span></label>
                         <label class="access-switch"><input type="checkbox" name="bindDeviceIp"><span>Vincular cada aparelho ao IP em que foi autorizado<small>Se o IP mudar, o aparelho precisa ser reautorizado. Reserve IPs fixos no roteador.</small></span></label>
+                        <label class="access-switch"><input type="checkbox" name="autoRenewIp"><span>Renovar o IP automaticamente em aparelhos de uso diário
+                            <small>Se o IP mudar na mesma rede, o aparelho tem a chave certa e o app ficou aberto em pelo menos 70% do último expediente, o servidor renova o acesso sozinho e troca a chave.</small></span></label>
+                        <label class="access-field access-inline">Renovações automáticas antes de exigir o administrador
+                            <input type="number" name="maxAutoRenewals" min="0" max="10" style="width:80px">
+                        </label>
                         <div class="devices-table" id="devices-container"></div>
                         <div class="device-add">
                             <strong>Autorizar por IP</strong>
