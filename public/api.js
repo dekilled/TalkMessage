@@ -41,10 +41,13 @@
             <div class="tm-access-icon">🔒</div>
             <h2>${ACCESS_TITLES[info.code] || 'Acesso bloqueado'}</h2>
             <p>${String(info.message || '').replace(/</g, '&lt;')}</p>${code}
-            <button type="button" id="tm-access-retry">Tentar novamente</button>
+            ${info.canAdjust ? '<button type="button" id="tm-access-adjust">🕒 Ajustar horário de hoje</button>' : ''}
+            <button type="button" id="tm-access-retry" class="${info.canAdjust ? 'secondary' : ''}">Tentar novamente</button>
         </div>`;
         el.style.display = 'flex';
         el.querySelector('#tm-access-retry').onclick = () => location.reload();
+        const adj = el.querySelector('#tm-access-adjust');
+        if (adj) adj.onclick = () => window.dispatchEvent(new CustomEvent('tm:adjust-schedule', { detail: { blocked: true } }));
     }
 
     const servedByServer = /^https?:$/.test(location.protocol) &&
@@ -75,7 +78,11 @@
                 .then(res => {
                     if (res.status === 401 && this.isClient) this.setToken(null);
                     if (res.status === 403) {
-                        res.clone().json().then(d => { if (ACCESS_CODES.includes(d.code)) this.blocked(d); }).catch(() => {});
+                        res.clone().json().then(d => {
+                            // Login fora do horário com permissão de ajuste: guarda o token limitado
+                            if (d.token) this.setToken(d.token);
+                            if (ACCESS_CODES.includes(d.code)) this.blocked(d);
+                        }).catch(() => {});
                     }
                     return res;
                 });

@@ -2407,3 +2407,23 @@ body {
 .sched-list li small { display: block; color: #888; }
 .sched-remove { padding: 6px 12px; border-radius: 8px; border: 1px solid #075e54; background: #fff; color: #075e54; cursor: pointer; }
 .sched-form [hidden] { display: none !important; }
+
+/* Atalho de horário, avisos e ajustes no meio do expediente */
+#sched-pill { position: fixed; right: 18px; bottom: 18px; z-index: 800; border: none; border-radius: 22px; padding: 10px 16px; background: #075e54; color: #fff; font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,.2); cursor: pointer; font-size: .9rem; }
+#sched-pill.special { background: #d97706; }
+@media (max-width: 768px) { #sched-pill { bottom: auto; top: 76px; right: 12px; padding: 7px 12px; font-size: .8rem; } }
+.tm-access-blocked ~ .sched-modal, .sched-modal { z-index: 100000; }
+.sched-until { display: flex; gap: 8px; }
+.sched-until button { flex: 1; }
+.sched-until input { padding: 8px; border: 1px solid #075e54; border-radius: 10px; font: inherit; }
+.sched-choices button.danger { border-color: #dc3545; color: #dc3545; }
+.sched-choices button.link { border: none; text-decoration: underline; font-weight: 500; }
+.sched-note { margin-top: 12px; }
+.sched-note input { padding: 8px 10px; border: 1px solid #d6dbe1; border-radius: 8px; font: inherit; }
+.tm-access-card #tm-access-adjust { display: block; width: 100%; margin-top: 16px; }
+.tm-access-card button.secondary { background: #fff; color: #075e54; border: 1px solid #075e54; }
+#tm-toasts { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 100001; display: flex; flex-direction: column; gap: 8px; width: min(480px, calc(100% - 24px)); }
+.tm-toast { display: flex; gap: 10px; align-items: center; background: #1f2d3a; color: #fff; padding: 12px 14px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: .9rem; }
+.tm-toast > div { flex: 1; }
+.tm-toast button { background: #25D366; color: #073; border: none; border-radius: 8px; padding: 6px 10px; font-weight: 700; cursor: pointer; }
+.tm-toast .tm-toast-x { background: transparent; color: #aaa; font-size: 1.2rem; padding: 0 4px; }

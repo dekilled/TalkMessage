@@ -135,6 +135,50 @@ function ipAllowed(ip, cfg) {
     return cfg.allowedNetworks.some(c => { const r = parseCidr(c); return r && ((n & r.mask) >>> 0) === r.base; });
 }
 
+// Agora está dentro da janela em que atendentes podem ajustar o horário?
+function withinAttendantWindow(cfg = getConfig(), now = new Date()) {
+    const m = now.getHours() * 60 + now.getMinutes();
+    return m >= toMin(cfg.attendantLimit.start) && m < toMin(cfg.attendantLimit.end);
+}
+
+const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+// Junta períodos sobrepostos/encostados
+function mergePeriods(list) {
+    const sorted = list.filter(p => toMin(p.start) < toMin(p.end)).sort((a, b) => toMin(a.start) - toMin(b.start));
+    const out = [];
+    for (const p of sorted) {
+        const last = out[out.length - 1];
+        if (last && toMin(p.start) <= toMin(last.end)) { if (toMin(p.end) > toMin(last.end)) last.end = p.end; }
+        else out.push({ ...p });
+    }
+    return out;
+}
+
+// Mudanças rápidas no meio do expediente (imprevistos)
+//  extra      → horário corrido/extraordinário (ex: 07:00–12:00)
+//  close_now  → encerra o expediente de hoje agora
+//  work_until → trabalha de agora até HH:MM (estende ou cobre o intervalo)
+function todayAction(action, { until, note } = {}, user) {
+    const cfg = getConfig();
+    const now = new Date();
+    const nowStr = hhmm(now);
+    const { periods } = periodsFor(now, cfg);
+    let next;
+    if (action === 'extra') {
+        next = cfg.extraPeriods;
+    } else if (action === 'close_now') {
+        next = periods.filter(p => p.start < nowStr).map(p => ({ start: p.start, end: p.end < nowStr ? p.end : nowStr }));
+    } else if (action === 'work_until') {
+        if (!TIME_RE.test(until || '') || until <= nowStr) throw new Error('Informe um horário de término depois de agora.');
+        next = mergePeriods([...periods, { start: nowStr, end: until }]);
+    } else {
+        throw new Error('Ação inválida.');
+    }
+    const defaults = { extra: 'Horário corrido', close_now: `Expediente encerrado às ${nowStr}`, work_until: `Expediente até ${until}` };
+    return setSpecialDay(dateKey(now), { periods: next, note: note || defaults[action] }, user);
+}
+
 // ─── Horário ──────────────────────────────────────────────────────────────────
 // ─── Dias especiais (horário extraordinário, feriado…) ───────────────────────
 // Guardados por data local: { 'AAAA-MM-DD': { periods, note, by, at } }
@@ -259,7 +303,10 @@ function removeDevice(deviceId) {
 
 // ─── Verificação central ──────────────────────────────────────────────────────
 // Retorna null se liberado, ou { status, code, message }.
-function check({ ip, deviceId, userAgent, user, stage }) {
+// Rotas que a atendente pode usar mesmo fora do horário (para corrigir o horário de hoje)
+const SCHEDULE_PATHS = /^\/(schedule(\/today|\/special\/\d{4}-\d{2}-\d{2})?|auth\/me)$/;
+
+function check({ ip, deviceId, userAgent, user, stage, path }) {
     const cfg = getConfig();
     if (cfg.disabled || isLocalhost(ip)) return null;
 
@@ -290,7 +337,9 @@ function check({ ip, deviceId, userAgent, user, stage }) {
     if (user && !(cfg.adminBypassSchedule && user.role === 'admin')) {
         const st = scheduleStatus(cfg);
         if (!st.open) {
-            return { status: 403, code: 'OUT_OF_HOURS', message: `Fora do horário de expediente. ${todayText(cfg)}` };
+            const canAdjust = withinAttendantWindow(cfg);
+            if (canAdjust && path && SCHEDULE_PATHS.test(path)) return null;
+            return { status: 403, code: 'OUT_OF_HOURS', message: `Fora do horário de expediente. ${todayText(cfg)}`, canAdjust };
         }
     }
     return null;
@@ -318,7 +367,7 @@ function requestMiddleware(req, res, next) {
     // /auth/login é verificado na própria rota (depois de saber quem é o usuário)
     if (!user && req.path !== '/auth/login') return next();
     if (req.path === '/auth/login') return next();
-    const denied = check({ ip: clientIp(req), deviceId: deviceIdOf(req), userAgent: req.headers['user-agent'], user });
+    const denied = check({ ip: clientIp(req), deviceId: deviceIdOf(req), userAgent: req.headers['user-agent'], user, path: req.path });
     if (!denied) return next();
     res.status(denied.status).json({ success: false, ...denied });
 }
@@ -350,7 +399,7 @@ function publicStatus() {
 
 module.exports = {
     getConfig, saveConfig, scheduleStatus, scheduleText, todayText, publicStatus,
-    listSpecialDays, setSpecialDay, removeSpecialDay, periodsFor, dateKey, periodsText,
+    listSpecialDays, setSpecialDay, todayAction, withinAttendantWindow, mergePeriods, hhmm, removeSpecialDay, periodsFor, dateKey, periodsText,
     check, clientIp, deviceIdOf, ipAllowed, parseCidr,
     networkMiddleware, requestMiddleware,
     listDevices, updateDevice, removeDevice

@@ -364,7 +364,29 @@ function enforceAccessOnSockets() {
         }
     }
 }
-setInterval(enforceAccessOnSockets, 60 * 1000);
+// Avisa 10 e 5 minutos antes de um período do expediente terminar
+const shiftWarned = new Set();
+function warnShiftEnding() {
+    const cfg = access.getConfig();
+    if (cfg.disabled || !cfg.enforceSchedule) return;
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const { periods } = access.periodsFor(now, cfg);
+    for (const p of periods) {
+        const [h, m] = p.end.split(':').map(Number);
+        const left = h * 60 + m - nowMin;
+        const startMin = Number(p.start.slice(0, 2)) * 60 + Number(p.start.slice(3));
+        if ((left === 10 || left === 5) && nowMin >= startMin) {
+            const key = `${access.dateKey(now)}-${p.end}-${left}`;
+            if (shiftWarned.has(key)) continue;
+            shiftWarned.add(key);
+            io.emit('shift_ending', { endsAt: p.end, minutesLeft: left });
+        }
+    }
+    if (shiftWarned.size > 50) shiftWarned.clear();
+}
+
+setInterval(() => { warnShiftEnding(); enforceAccessOnSockets(); }, 60 * 1000);
 
 // 7. Rotas — Públicas (sem autenticação)
 // Usado pelos clientes (APK/EXE) para localizar o servidor na rede
@@ -391,6 +413,11 @@ app.post('/auth/login', async (req, res) => {
         ip: access.clientIp(req), deviceId: access.deviceIdOf(req),
         userAgent: req.headers['user-agent'], user: sessionUser
     });
+    if (denied && denied.code === 'OUT_OF_HOURS' && denied.canAdjust) {
+        // Fora do horário, mas dentro da janela permitida: entra só para ajustar o horário de hoje
+        req.session.user = sessionUser;
+        return res.status(403).json({ success: false, ...denied, user: sessionUser, token: auth.issueToken(sessionUser) });
+    }
     if (denied) return res.status(denied.status).json({ success: false, ...denied });
     req.session.user = sessionUser;
     // Token para clientes empacotados (cookies não atravessam origens)
@@ -740,12 +767,33 @@ app.get('/schedule', auth.authMiddleware, (req, res) => {
     });
 });
 
+function scheduleChanged(user, day, removed = false) {
+    const text = removed ? 'horário normal' : access.periodsText(day.periods);
+    console.log(`[horário] ${user.username} definiu ${day.date}: ${text}${day.note ? ' — ' + day.note : ''}`);
+    enforceAccessOnSockets();
+    io.emit('access_changed', access.publicStatus());
+    io.emit('schedule_changed', {
+        by: user.name, date: day.date, text, note: removed ? '' : (day.note || ''),
+        today: day.date === access.dateKey()
+    });
+}
+
+// Mudança rápida no meio do expediente: { action: 'extra' | 'close_now' | 'work_until', until, note }
+app.post('/schedule/today', auth.authMiddleware, (req, res) => {
+    try {
+        const { action, until, note } = req.body || {};
+        const day = access.todayAction(action, { until, note }, req.session.user);
+        scheduleChanged(req.session.user, day);
+        res.json({ success: true, day, status: access.publicStatus() });
+    } catch (e) {
+        res.status(400).json({ success: false, message: e.message });
+    }
+});
+
 app.put('/schedule/special/:date', auth.authMiddleware, (req, res) => {
     try {
         const day = access.setSpecialDay(req.params.date, req.body || {}, req.session.user);
-        console.log(`[horário] ${req.session.user.username} definiu ${day.date}: ${access.periodsText(day.periods)}`);
-        enforceAccessOnSockets();
-        io.emit('access_changed', access.publicStatus());
+        scheduleChanged(req.session.user, day);
         res.json({ success: true, day });
     } catch (e) {
         res.status(400).json({ success: false, message: e.message });
@@ -755,8 +803,7 @@ app.put('/schedule/special/:date', auth.authMiddleware, (req, res) => {
 app.delete('/schedule/special/:date', auth.authMiddleware, (req, res) => {
     if (req.params.date < access.dateKey()) return res.status(400).json({ success: false, message: 'Não é possível alterar dias que já passaram.' });
     if (!access.removeSpecialDay(req.params.date)) return res.status(404).json({ success: false, message: 'Não há horário especial nessa data.' });
-    enforceAccessOnSockets();
-    io.emit('access_changed', access.publicStatus());
+    scheduleChanged(req.session.user, { date: req.params.date }, true);
     res.json({ success: true });
 });
 
