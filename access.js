@@ -28,21 +28,62 @@ const DEFAULTS = {
     allowedNetworks: ['192.168.0.0/16', '10.0.0.0/8', '172.16.0.0/12'],
     enforceDevices: false,
     enforceSchedule: true,
-    schedule: { days: [1, 2, 3, 4, 5], start: '07:00', end: '18:00' }, // 0 = domingo
+    // Expediente normal: dias da semana (0 = domingo) e períodos do dia
+    schedule: { days: [1, 2, 3, 4, 5], periods: [{ start: '07:00', end: '11:00' }, { start: '13:00', end: '17:00' }] },
+    // Atalho "horário extraordinário" oferecido às atendentes
+    extraPeriods: [{ start: '07:00', end: '12:00' }],
+    // Limite para dias especiais definidos por atendentes (admin não tem limite)
+    attendantLimit: { start: '06:00', end: '19:00' },
     adminBypassSchedule: true,
     overrideUntil: null              // liberação temporária do horário (ISO)
 };
 
 function getConfig() {
     const saved = db.getSetting('access', {});
-    return { ...DEFAULTS, ...saved, schedule: { ...DEFAULTS.schedule, ...(saved.schedule || {}) } };
+    const schedule = { ...DEFAULTS.schedule, ...(saved.schedule || {}) };
+    // Formato antigo (start/end único) → períodos
+    if (schedule.start && schedule.end && !(saved.schedule && saved.schedule.periods)) {
+        schedule.periods = [{ start: schedule.start, end: schedule.end }];
+    }
+    delete schedule.start; delete schedule.end;
+    return { ...DEFAULTS, ...saved, schedule };
 }
+
+// ─── Períodos ("07:00-11:00, 13:00-17:00") ───────────────────────────────────
+const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+
+function parsePeriods(input) {
+    if (Array.isArray(input)) return input.map(p => ({ start: String(p.start || '').trim(), end: String(p.end || '').trim() }));
+    return String(input || '').split(/[,;\n]+/).map(x => x.trim()).filter(Boolean).map(x => {
+        const [start = '', end = ''] = x.split(/\s*(?:-|–|às|a)\s*/);
+        return { start: start.replace(/h$/, ''), end: end.replace(/h$/, '') };
+    });
+}
+
+function validatePeriods(periods, { allowEmpty = false, limit = null } = {}) {
+    if (!Array.isArray(periods) || (!allowEmpty && !periods.length)) return 'Informe ao menos um período (ex: 07:00-11:00).';
+    if (periods.length > 6) return 'Máximo de 6 períodos por dia.';
+    const sorted = [...periods].sort((a, b) => a.start.localeCompare(b.start));
+    for (let i = 0; i < sorted.length; i++) {
+        const p = sorted[i];
+        if (!TIME_RE.test(p.start) || !TIME_RE.test(p.end)) return 'Horário inválido (use HH:MM, ex: 07:00-11:00).';
+        if (toMin(p.start) >= toMin(p.end)) return `O período ${p.start}-${p.end} termina antes de começar.`;
+        if (i && toMin(p.start) < toMin(sorted[i - 1].end)) return 'Os períodos não podem se sobrepor.';
+        if (limit && (toMin(p.start) < toMin(limit.start) || toMin(p.end) > toMin(limit.end))) {
+            return `Atendentes só podem definir horários entre ${limit.start} e ${limit.end}.`;
+        }
+    }
+    return null;
+}
+
+const periodsText = (periods) => periods.length ? periods.map(p => `${p.start}–${p.end}`).join(' e ') : 'sem expediente';
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 function validate(cfg) {
     if (!Array.isArray(cfg.allowedNetworks) || cfg.allowedNetworks.some(n => !parseCidr(n))) return 'Faixa de rede inválida (use o formato 192.168.0.0/24).';
     const s = cfg.schedule;
-    if (!TIME_RE.test(s.start) || !TIME_RE.test(s.end)) return 'Horário inválido (use HH:MM).';
+    const perr = validatePeriods(s.periods) || validatePeriods(cfg.extraPeriods) || validatePeriods([cfg.attendantLimit]);
+    if (perr) return perr;
     if (!Array.isArray(s.days) || s.days.some(d => !Number.isInteger(d) || d < 0 || d > 6)) return 'Dias da semana inválidos.';
     return null;
 }
@@ -52,6 +93,9 @@ function saveConfig(patch) {
     const next = { ...cur };
     for (const k of Object.keys(DEFAULTS)) if (patch[k] !== undefined) next[k] = patch[k];
     if (patch.schedule) next.schedule = { ...cur.schedule, ...patch.schedule };
+    if (patch.schedule && patch.schedule.periods !== undefined) next.schedule.periods = parsePeriods(patch.schedule.periods);
+    if (patch.extraPeriods !== undefined) next.extraPeriods = parsePeriods(patch.extraPeriods);
+    if (patch.attendantLimit !== undefined) next.attendantLimit = parsePeriods(patch.attendantLimit)[0] || cur.attendantLimit;
     if (typeof next.allowedNetworks === 'string') next.allowedNetworks = next.allowedNetworks.split(/[\s,]+/).filter(Boolean);
     for (const k of ['disabled', 'enforceNetwork', 'enforceDevices', 'enforceSchedule', 'adminBypassSchedule']) next[k] = !!next[k];
     const err = validate(next);
@@ -92,27 +136,84 @@ function ipAllowed(ip, cfg) {
 }
 
 // ─── Horário ──────────────────────────────────────────────────────────────────
+// ─── Dias especiais (horário extraordinário, feriado…) ───────────────────────
+// Guardados por data local: { 'AAAA-MM-DD': { periods, note, by, at } }
+const dateKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function getSpecialDays() { return db.getSetting('access_special_days', {}); }
+
+function listSpecialDays() {
+    const today = dateKey();
+    const all = getSpecialDays();
+    // limpa datas antigas (guarda 30 dias de histórico)
+    const cutoff = dateKey(new Date(Date.now() - 30 * 86400000));
+    let changed = false;
+    for (const k of Object.keys(all)) if (k < cutoff) { delete all[k]; changed = true; }
+    if (changed) db.setSetting('access_special_days', all);
+    return Object.entries(all).filter(([k]) => k >= today).sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, v]) => ({ date, ...v }));
+}
+
+function setSpecialDay(date, { periods, note }, user) {
+    if (!DATE_RE.test(date)) throw new Error('Data inválida.');
+    const today = dateKey();
+    if (date < today) throw new Error('Não é possível alterar dias que já passaram.');
+    if (date > dateKey(new Date(Date.now() + 90 * 86400000))) throw new Error('Só é possível programar até 90 dias à frente.');
+    const cfg = getConfig();
+    const list = parsePeriods(periods);
+    const err = validatePeriods(list, { allowEmpty: true, limit: user.role === 'admin' ? null : cfg.attendantLimit });
+    if (err) throw new Error(err);
+    const all = getSpecialDays();
+    all[date] = {
+        periods: list.sort((a, b) => a.start.localeCompare(b.start)),
+        note: String(note || '').slice(0, 120),
+        by: user.name || user.username, at: new Date().toISOString()
+    };
+    db.setSetting('access_special_days', all);
+    return { date, ...all[date] };
+}
+
+function removeSpecialDay(date) {
+    const all = getSpecialDays();
+    if (!all[date]) return false;
+    delete all[date];
+    db.setSetting('access_special_days', all);
+    return true;
+}
+
+// Períodos que valem num dia (especial tem prioridade sobre o normal)
+function periodsFor(date = new Date(), cfg = getConfig()) {
+    const special = getSpecialDays()[dateKey(date)];
+    if (special) return { periods: special.periods, special };
+    return { periods: cfg.schedule.days.includes(date.getDay()) ? cfg.schedule.periods : [], special: null };
+}
+
+// ─── Horário ──────────────────────────────────────────────────────────────────
 function scheduleStatus(cfg = getConfig(), now = new Date()) {
-    const { days, start, end } = cfg.schedule;
     const minutes = now.getHours() * 60 + now.getMinutes();
-    const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-    const s = toMin(start), e = toMin(end);
-    // Suporta expediente que vira a noite (ex: 22:00–06:00)
-    const inWindow = s <= e ? (minutes >= s && minutes < e) : (minutes >= s || minutes < e);
-    const day = (s > e && minutes < e) ? (now.getDay() + 6) % 7 : now.getDay();
+    const { periods, special } = periodsFor(now, cfg);
+    const inWindow = periods.some(p => minutes >= toMin(p.start) && minutes < toMin(p.end));
     const override = cfg.overrideUntil && new Date(cfg.overrideUntil) > now;
     return {
-        open: !cfg.enforceSchedule || override || (days.includes(day) && inWindow),
+        open: !cfg.enforceSchedule || override || inWindow,
         override: !!override,
         overrideUntil: override ? cfg.overrideUntil : null,
+        today: { date: dateKey(now), periods, special: !!special, note: special ? special.note : '' },
         schedule: cfg.schedule
     };
 }
 
 const DAY_NAMES = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
-function scheduleText(cfg) {
-    const { days, start, end } = cfg.schedule;
-    return `${days.slice().sort().map(d => DAY_NAMES[d]).join(', ')} das ${start} às ${end}`;
+function scheduleText(cfg = getConfig()) {
+    const { days, periods } = cfg.schedule;
+    return `${days.slice().sort().map(d => DAY_NAMES[d]).join(', ')}: ${periodsText(periods)}`;
+}
+
+// Mensagem de bloqueio: diz o horário de hoje
+function todayText(cfg = getConfig()) {
+    const { periods, special } = periodsFor(new Date(), cfg);
+    return `Hoje${special ? ' (horário especial)' : ''}: ${periodsText(periods)}.`;
 }
 
 // ─── Dispositivos ─────────────────────────────────────────────────────────────
@@ -189,7 +290,7 @@ function check({ ip, deviceId, userAgent, user, stage }) {
     if (user && !(cfg.adminBypassSchedule && user.role === 'admin')) {
         const st = scheduleStatus(cfg);
         if (!st.open) {
-            return { status: 403, code: 'OUT_OF_HOURS', message: `Fora do horário de expediente. Acesso liberado ${scheduleText(cfg)}.` };
+            return { status: 403, code: 'OUT_OF_HOURS', message: `Fora do horário de expediente. ${todayText(cfg)}` };
         }
     }
     return null;
@@ -239,12 +340,17 @@ function publicStatus() {
         override: st.override,
         overrideUntil: st.overrideUntil,
         scheduleText: scheduleText(cfg),
+        todayText: todayText(cfg),
+        today: st.today,
+        extraPeriods: cfg.extraPeriods,
+        attendantLimit: cfg.attendantLimit,
         serverTime: new Date().toISOString()
     };
 }
 
 module.exports = {
-    getConfig, saveConfig, scheduleStatus, scheduleText, publicStatus,
+    getConfig, saveConfig, scheduleStatus, scheduleText, todayText, publicStatus,
+    listSpecialDays, setSpecialDay, removeSpecialDay, periodsFor, dateKey, periodsText,
     check, clientIp, deviceIdOf, ipAllowed, parseCidr,
     networkMiddleware, requestMiddleware,
     listDevices, updateDevice, removeDevice

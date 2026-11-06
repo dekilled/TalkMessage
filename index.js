@@ -726,6 +726,40 @@ app.delete('/devices/:id', auth.authMiddleware, auth.requireRole('admin'), (req,
     res.json({ success: true });
 });
 
+// Horário do dia / dias especiais — qualquer usuário logado pode definir
+// (atendentes ficam dentro do limite configurado pelo admin)
+app.get('/schedule', auth.authMiddleware, (req, res) => {
+    const cfg = access.getConfig();
+    res.json({
+        today: access.scheduleStatus(cfg).today,
+        normal: cfg.schedule,
+        extraPeriods: cfg.extraPeriods,
+        attendantLimit: cfg.attendantLimit,
+        enforceSchedule: cfg.enforceSchedule,
+        specialDays: access.listSpecialDays()
+    });
+});
+
+app.put('/schedule/special/:date', auth.authMiddleware, (req, res) => {
+    try {
+        const day = access.setSpecialDay(req.params.date, req.body || {}, req.session.user);
+        console.log(`[horário] ${req.session.user.username} definiu ${day.date}: ${access.periodsText(day.periods)}`);
+        enforceAccessOnSockets();
+        io.emit('access_changed', access.publicStatus());
+        res.json({ success: true, day });
+    } catch (e) {
+        res.status(400).json({ success: false, message: e.message });
+    }
+});
+
+app.delete('/schedule/special/:date', auth.authMiddleware, (req, res) => {
+    if (req.params.date < access.dateKey()) return res.status(400).json({ success: false, message: 'Não é possível alterar dias que já passaram.' });
+    if (!access.removeSpecialDay(req.params.date)) return res.status(404).json({ success: false, message: 'Não há horário especial nessa data.' });
+    enforceAccessOnSockets();
+    io.emit('access_changed', access.publicStatus());
+    res.json({ success: true });
+});
+
 // 10. Rotas — Pacientes (ficha, histórico, exames e pedidos)
 app.get('/patients', auth.authMiddleware, (req, res) => {
     res.json(db.searchPatients(req.query.q || ''));

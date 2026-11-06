@@ -20,8 +20,8 @@
         let cls = 'ok', text;
         if (status.disabled) { cls = 'warn'; text = '⚠️ Bloqueios desativados: qualquer aparelho da rede pode entrar a qualquer hora.'; }
         else if (status.override) text = `🔓 Liberação temporária ativa até ${fmt(status.overrideUntil)}.`;
-        else if (status.open) text = `✅ Dentro do expediente (${esc(status.scheduleText)}).`;
-        else { cls = 'closed'; text = `🔒 Fora do expediente: só o administrador entra. Expediente: ${esc(status.scheduleText)}.`; }
+        else if (status.open) text = `✅ Dentro do expediente. ${esc(status.todayText)}`;
+        else { cls = 'closed'; text = `🔒 Fora do expediente: só o administrador entra. ${esc(status.todayText)}`; }
         box.className = `config-block access-status access-${cls}`;
         box.innerHTML = `<div>${text}</div><small>Este aparelho: IP ${esc(you.ip)} · código ${esc((you.deviceId || '').slice(-6).toUpperCase())}</small>`;
     }
@@ -49,8 +49,10 @@
     function fillForm(cfg) {
         const f = document.getElementById('access-form');
         for (const k of ['disabled', 'enforceSchedule', 'adminBypassSchedule', 'enforceNetwork', 'enforceDevices']) f.elements[k].checked = !!cfg[k];
-        f.elements.start.value = cfg.schedule.start;
-        f.elements.end.value = cfg.schedule.end;
+        const txt = (ps) => ps.map(p => `${p.start}-${p.end}`).join(', ');
+        f.elements.periods.value = txt(cfg.schedule.periods);
+        f.elements.extraPeriods.value = txt(cfg.extraPeriods);
+        f.elements.attendantLimit.value = txt([cfg.attendantLimit]);
         f.elements.allowedNetworks.value = cfg.allowedNetworks.join('\n');
         document.getElementById('access-days').innerHTML = DAYS.map((d, i) =>
             `<label class="day-chip"><input type="checkbox" value="${i}" ${cfg.schedule.days.includes(i) ? 'checked' : ''}><span>${d}</span></label>`).join('');
@@ -88,7 +90,9 @@
                     enforceNetwork: f.enforceNetwork.checked,
                     enforceDevices: f.enforceDevices.checked,
                     allowedNetworks: f.allowedNetworks.value,
-                    schedule: { days, start: f.start.value, end: f.end.value }
+                    schedule: { days, periods: f.periods.value },
+                    extraPeriods: f.extraPeriods.value,
+                    attendantLimit: f.attendantLimit.value
                 }));
                 const ok = form.querySelector('.access-saved');
                 ok.hidden = false; setTimeout(() => ok.hidden = true, 2000);

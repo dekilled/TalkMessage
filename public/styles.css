@@ -2390,3 +2390,20 @@ body {
     #devices-container .device-card { grid-template-columns: auto 1fr; }
     .device-actions { grid-column: span 2; justify-content: flex-start; }
 }
+
+/* ─── Horário do dia ───────────────────────────────────────────────────── */
+.sched-modal { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,.45); align-items: center; justify-content: center; padding: 16px; }
+.sched-big { font-size: 1.35rem; font-weight: 700; color: #075e54; margin: 6px 0; }
+.sched-choices { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.sched-choices button { padding: 11px 14px; border-radius: 10px; border: 1px solid #075e54; background: #fff; color: #075e54; font-weight: 600; cursor: pointer; font-size: .95rem; }
+.sched-choices button.btn-primary { background: #075e54; color: #fff; }
+.sched-error { color: #dc3545; margin-top: 8px; }
+.sched-form { display: flex; flex-direction: column; gap: 10px; }
+.sched-form input { padding: 8px 10px; border: 1px solid #d6dbe1; border-radius: 8px; font: inherit; }
+.sched-options { display: flex; gap: 14px; flex-wrap: wrap; }
+.sched-options label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.sched-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sched-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px; border: 1px solid #eee; border-left: 4px solid #f5a623; border-radius: 8px; flex-wrap: wrap; }
+.sched-list li small { display: block; color: #888; }
+.sched-remove { padding: 6px 12px; border-radius: 8px; border: 1px solid #075e54; background: #fff; color: #075e54; cursor: pointer; }
+.sched-form [hidden] { display: none !important; }

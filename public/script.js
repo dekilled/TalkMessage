@@ -73,6 +73,7 @@ function logout() {
 
 function initApp() {
     applyPermissions(currentUser.role);
+    if (window.Schedule) Schedule.promptToday();
 
     // Limpa cards hardcoded de demonstração
     ['#pendentes .cards-container', '#atendimento .cards-container', '#concluidos .cards-container'].forEach(sel => {
@@ -533,6 +534,7 @@ function initChart() {
 
 function showConfigPage(pageIndex) {
     if (pageIndex === 2 && window.AccessAdmin) AccessAdmin.load();
+    if (pageIndex === 5 && window.Schedule) Schedule.loadPanel();
     document.querySelectorAll('.config-panel').forEach(p => {
         p.classList.toggle('active', parseInt(p.dataset.panel) === pageIndex);
     });

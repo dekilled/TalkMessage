@@ -503,6 +503,17 @@
                 <svg class="config-nav-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
             </div>
 
+            <div class="config-nav-item" data-page="5" onclick="showConfigPage(5)">
+                <div class="config-nav-icon" style="background:rgba(40,167,69,0.1);color:#28a745">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </div>
+                <div class="config-nav-label">
+                    <span class="config-nav-title-text">Horário do dia</span>
+                    <span class="config-nav-desc">Expediente normal e extraordinário</span>
+                </div>
+                <svg class="config-nav-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+
             <div class="config-nav-item" data-page="2" data-min-role="admin" onclick="showConfigPage(2)">
                 <div class="config-nav-icon" style="background:rgba(90,103,216,0.1);color:#5a67d8">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -617,6 +628,31 @@
                 </div>
             </div>
 
+            <!-- Panel 5: Horário do dia (todos) -->
+            <div class="config-panel" data-panel="5">
+                <h3 class="config-panel-title">Horário do dia</h3>
+                <div class="config-block" id="sched-today"></div>
+                <div class="config-block">
+                    <h4>Programar horário especial</h4>
+                    <form id="sched-form" class="sched-form">
+                        <label class="access-field">Data<input type="date" name="date" required></label>
+                        <div class="sched-options">
+                            <label><input type="radio" name="kind" value="extra" checked> <span id="sched-extra-label">Extraordinário</span></label>
+                            <label><input type="radio" name="kind" value="custom"> Personalizado</label>
+                            <label><input type="radio" name="kind" value="closed"> Sem expediente</label>
+                        </div>
+                        <label class="access-field sched-custom" hidden>Períodos<input name="periods" placeholder="07:00-12:00"></label>
+                        <label class="access-field">Motivo (opcional)<input name="note" maxlength="120" placeholder="Ex: reunião à tarde, ponto facultativo"></label>
+                        <button type="submit" class="config-btn btn-primary">Salvar horário especial</button>
+                    </form>
+                    <p class="input-hint" id="sched-limit"></p>
+                </div>
+                <div class="config-block">
+                    <h4>Próximos dias especiais</h4>
+                    <ul class="sched-list" id="sched-list"></ul>
+                </div>
+            </div>
+
             <!-- Panel 2: Acesso e dispositivos (admin) -->
             <div class="config-panel" data-panel="2">
                 <h3 class="config-panel-title">Acesso e Dispositivos</h3>
@@ -635,10 +671,15 @@
                         <h4>🕒 Horário de expediente</h4>
                         <label class="access-switch"><input type="checkbox" name="enforceSchedule"><span>Bloquear acesso fora do horário</span></label>
                         <div class="access-days" id="access-days"></div>
-                        <div class="access-row">
-                            <label>Início<input type="time" name="start" required></label>
-                            <label>Fim<input type="time" name="end" required></label>
-                        </div>
+                        <label class="access-field">Horário normal (períodos separados por vírgula)
+                            <input name="periods" placeholder="07:00-11:00, 13:00-17:00" required>
+                        </label>
+                        <label class="access-field">Horário extraordinário (atalho para as atendentes)
+                            <input name="extraPeriods" placeholder="07:00-12:00" required>
+                        </label>
+                        <label class="access-field">Atendentes podem definir dias especiais somente entre
+                            <input name="attendantLimit" placeholder="06:00-19:00" required>
+                        </label>
                         <label class="access-switch"><input type="checkbox" name="adminBypassSchedule"><span>Administrador pode entrar fora do horário</span></label>
                         <div class="access-override">
                             <span>Liberar agora, fora do horário:</span>
@@ -1009,6 +1050,7 @@
     </script>
     <script src="patients.js"></script>
     <script src="access-admin.js"></script>
+    <script src="schedule.js"></script>
     <script src="script.js"></script>
 
 </body>
