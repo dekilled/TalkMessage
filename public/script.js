@@ -114,6 +114,7 @@ function initApp() {
 
     if (window.Patients) Patients.bindSocket(socket);
     if (window.Schedule) Schedule.bindSocket(socket);
+    if (window.AccessAdmin && currentUser.role === 'admin') AccessAdmin.bindSocket(socket);
 
     socket.on('rating_received', (data) => {
         const card = document.querySelector(`#concluidos .card[data-phone="${data.phone}"] .rating-slot`);

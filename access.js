@@ -8,6 +8,9 @@
 //  4. Horário: fora do expediente só o admin entra (se "admin ignora horário").
 //  Só o admin pode mudar as regras, liberar temporariamente ou desativar o bloqueio.
 const db = require('./db');
+const { EventEmitter } = require('events');
+// 'devices' → a lista de aparelhos mudou (novo pendente, online/offline, aprovação)
+const events = new EventEmitter();
 
 db.sql.exec(`
 CREATE TABLE IF NOT EXISTS devices (
@@ -21,12 +24,17 @@ CREATE TABLE IF NOT EXISTS devices (
     last_seen TEXT,
     created_at TEXT NOT NULL
 );`);
+// Colunas novas (bancos criados antes desta versão)
+for (const col of ['approved_ip TEXT', 'approved_by TEXT', 'approved_at TEXT']) {
+    try { db.sql.exec(`ALTER TABLE devices ADD COLUMN ${col}`); } catch { /* já existe */ }
+}
 
 const DEFAULTS = {
     disabled: false,                 // chave geral: true = nenhum bloqueio (só o admin muda)
     enforceNetwork: true,
     allowedNetworks: ['192.168.0.0/16', '10.0.0.0/8', '172.16.0.0/12'],
-    enforceDevices: false,
+    enforceDevices: true,            // só aparelhos autorizados pelo servidor
+    bindDeviceIp: true,              // o aparelho só vale no IP em que foi autorizado
     enforceSchedule: true,
     // Expediente normal: dias da semana (0 = domingo) e períodos do dia
     schedule: { days: [1, 2, 3, 4, 5], periods: [{ start: '07:00', end: '11:00' }, { start: '13:00', end: '17:00' }] },
@@ -97,7 +105,7 @@ function saveConfig(patch) {
     if (patch.extraPeriods !== undefined) next.extraPeriods = parsePeriods(patch.extraPeriods);
     if (patch.attendantLimit !== undefined) next.attendantLimit = parsePeriods(patch.attendantLimit)[0] || cur.attendantLimit;
     if (typeof next.allowedNetworks === 'string') next.allowedNetworks = next.allowedNetworks.split(/[\s,]+/).filter(Boolean);
-    for (const k of ['disabled', 'enforceNetwork', 'enforceDevices', 'enforceSchedule', 'adminBypassSchedule']) next[k] = !!next[k];
+    for (const k of ['disabled', 'enforceNetwork', 'enforceDevices', 'bindDeviceIp', 'enforceSchedule', 'adminBypassSchedule']) next[k] = !!next[k];
     const err = validate(next);
     if (err) throw new Error(err);
     db.setSetting('access', next);
@@ -261,44 +269,96 @@ function todayText(cfg = getConfig()) {
 }
 
 // ─── Dispositivos ─────────────────────────────────────────────────────────────
+// Cada aparelho (PC ou celular) tem um código fixo (X-Device-Id, gerado pelo app).
+// O admin autoriza o aparelho, que fica vinculado ao IP em que foi autorizado.
+// Também dá para pré-autorizar um IP ("ip:192.168.0.20") antes do aparelho conectar.
 const deviceIdOf = (req) => String(req.headers['x-device-id'] || '').slice(0, 64) || null;
+const now = () => new Date().toISOString();
+const getDevice = (id) => db.sql.prepare('SELECT * FROM devices WHERE device_id = ?').get(id);
 
 function touchDevice(deviceId, ip, ua, user) {
     if (!deviceId) return null;
-    const t = new Date().toISOString();
+    const isNew = !getDevice(deviceId);
+    const t = now();
     db.sql.prepare(`INSERT INTO devices (device_id, ip, user_agent, last_user, last_seen, created_at, type)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(device_id) DO UPDATE SET ip = excluded.ip, user_agent = excluded.user_agent,
             last_user = COALESCE(excluded.last_user, devices.last_user), last_seen = excluded.last_seen`)
         .run(deviceId, ip, (ua || '').slice(0, 300), user || null, t, t, /Mobi|Android|iPhone/i.test(ua || '') ? 'mobile' : 'computer');
-    return db.sql.prepare('SELECT * FROM devices WHERE device_id = ?').get(deviceId);
+
+    // IP pré-autorizado pelo admin → o aparelho que chega nesse IP herda a autorização
+    const pre = getDevice('ip:' + ip);
+    const dev = getDevice(deviceId);
+    if (pre && pre.status === 'approved' && dev.status === 'pending') {
+        db.sql.prepare(`UPDATE devices SET status = 'approved', name = COALESCE(name, ?), type = COALESCE(?, type),
+            approved_ip = ?, approved_by = ?, approved_at = ? WHERE device_id = ?`)
+            .run(pre.name, pre.type, ip, pre.approved_by, now(), deviceId);
+        db.sql.prepare('DELETE FROM devices WHERE device_id = ?').run(pre.device_id);
+    }
+    if (isNew) events.emit('devices', { type: 'new', device: getDevice(deviceId) });
+    return getDevice(deviceId);
 }
 
 // Evita gravar no banco a cada requisição: atualiza o "visto por último" no máximo 1x/min por aparelho
 const lastTouch = new Map();
 function seenDevice(deviceId, ip, ua, user) {
     const prev = lastTouch.get(deviceId);
-    if (prev && Date.now() - prev.at < 60000 && prev.row.ip === ip && (!user || prev.row.last_user === user)) {
-        return db.sql.prepare('SELECT * FROM devices WHERE device_id = ?').get(deviceId);
-    }
+    if (prev && Date.now() - prev.at < 60000 && prev.ip === ip && (!user || prev.user === user)) return getDevice(deviceId);
     const row = touchDevice(deviceId, ip, ua, user);
-    if (row) lastTouch.set(deviceId, { at: Date.now(), row });
+    if (row) lastTouch.set(deviceId, { at: Date.now(), ip, user: row.last_user });
     return row;
 }
 
-const listDevices = () => db.sql.prepare("SELECT * FROM devices ORDER BY status = 'pending' DESC, last_seen DESC").all();
+// Online = com o app aberto (Socket.IO conectado)
+const onlineSockets = new Map(); // deviceId -> nº de conexões
+function socketOnline(deviceId, delta) {
+    if (!deviceId) return;
+    const n = (onlineSockets.get(deviceId) || 0) + delta;
+    n > 0 ? onlineSockets.set(deviceId, n) : onlineSockets.delete(deviceId);
+    events.emit('devices', { type: delta > 0 ? 'online' : 'offline', deviceId });
+}
 
-function updateDevice(deviceId, { name, status }) {
+function listDevices() {
+    return db.sql.prepare("SELECT * FROM devices ORDER BY status = 'pending' DESC, status = 'approved' DESC, COALESCE(name, device_id)").all()
+        .map(d => ({ ...d, online: onlineSockets.has(d.device_id), preauthorized: d.device_id.startsWith('ip:') }));
+}
+
+function updateDevice(deviceId, { name, status, ip }, by) {
     if (status && !['pending', 'approved', 'blocked'].includes(status)) throw new Error('Status inválido.');
-    const r = db.sql.prepare('UPDATE devices SET name = COALESCE(?, name), status = COALESCE(?, status) WHERE device_id = ?')
-        .run(name ?? null, status ?? null, deviceId);
+    if (ip !== undefined && ipToInt(ip) === null) throw new Error('IP inválido.');
+    const dev = getDevice(deviceId);
+    if (!dev) return false;
+    const approving = status === 'approved' && dev.status !== 'approved';
+    db.sql.prepare(`UPDATE devices SET name = COALESCE(?, name), status = COALESCE(?, status),
+            approved_ip = CASE WHEN ? IS NOT NULL THEN ? WHEN ? THEN ip ELSE approved_ip END,
+            approved_by = CASE WHEN ? THEN ? ELSE approved_by END,
+            approved_at = CASE WHEN ? THEN ? ELSE approved_at END
+        WHERE device_id = ?`)
+        .run(name ?? null, status ?? null, ip ?? null, ip ?? null, approving ? 1 : 0,
+            approving ? 1 : 0, by || null, approving ? 1 : 0, now(), deviceId);
     lastTouch.delete(deviceId);
-    return r.changes > 0;
+    events.emit('devices', { type: 'updated', deviceId });
+    return true;
+}
+
+// Pré-autoriza um IP fixo (ex: computador da recepção com IP reservado)
+function addDeviceByIp({ name, ip, type }, by) {
+    if (ipToInt(ip || '') === null) throw new Error('IP inválido (ex: 192.168.0.20).');
+    if (!name) throw new Error('Informe um nome para o aparelho.');
+    const taken = db.sql.prepare("SELECT name FROM devices WHERE approved_ip = ? AND status = 'approved'").get(ip);
+    if (taken) throw new Error(`O IP ${ip} já está autorizado para "${taken.name || 'outro aparelho'}".`);
+    db.sql.prepare(`INSERT OR REPLACE INTO devices (device_id, name, type, ip, status, approved_ip, approved_by, approved_at, created_at)
+        VALUES (?, ?, ?, ?, 'approved', ?, ?, ?, ?)`)
+        .run('ip:' + ip, name, type === 'mobile' ? 'mobile' : 'computer', ip, ip, by || null, now(), now());
+    events.emit('devices', { type: 'updated' });
+    return getDevice('ip:' + ip);
 }
 
 function removeDevice(deviceId) {
     lastTouch.delete(deviceId);
-    return db.sql.prepare('DELETE FROM devices WHERE device_id = ?').run(deviceId).changes > 0;
+    const ok = db.sql.prepare('DELETE FROM devices WHERE device_id = ?').run(deviceId).changes > 0;
+    if (ok) events.emit('devices', { type: 'removed', deviceId });
+    return ok;
 }
 
 // ─── Verificação central ──────────────────────────────────────────────────────
@@ -317,18 +377,16 @@ function check({ ip, deviceId, userAgent, user, stage, path }) {
     // Dispositivo e horário só valem para a API (arquivos estáticos e /api/ping passam)
     if (stage === 'network') return null;
 
+    // Aparelhos: vale para todos, inclusive o admin (que sempre entra pelo computador central)
     if (cfg.enforceDevices) {
-        const isAdmin = user && user.role === 'admin';
-        if (!deviceId) {
-            if (!isAdmin) return { status: 403, code: 'DEVICE_UNKNOWN', message: 'Dispositivo não identificado.' };
-        } else {
-            const dev = seenDevice(deviceId, ip, userAgent, user && user.username);
-            // O admin sempre consegue entrar (para poder aprovar os outros aparelhos)
-            if (!isAdmin && dev.status !== 'approved') {
-                return dev.status === 'blocked'
-                    ? { status: 403, code: 'DEVICE_BLOCKED', message: 'Este dispositivo foi bloqueado pelo administrador.' }
-                    : { status: 403, code: 'DEVICE_PENDING', message: 'Este dispositivo aguarda aprovação do administrador.', deviceId };
-            }
+        if (!deviceId) return { status: 403, code: 'DEVICE_UNKNOWN', message: 'Dispositivo não identificado. Atualize o aplicativo.' };
+        const dev = seenDevice(deviceId, ip, userAgent, user && user.username);
+        if (dev.status === 'blocked') return { status: 403, code: 'DEVICE_BLOCKED', message: 'Este dispositivo foi bloqueado pelo administrador.', deviceId, ip };
+        if (dev.status !== 'approved') {
+            return { status: 403, code: 'DEVICE_PENDING', message: `Este dispositivo (IP ${ip}) ainda não foi autorizado. Peça ao administrador para autorizá-lo no computador central.`, deviceId, ip };
+        }
+        if (cfg.bindDeviceIp && dev.approved_ip && dev.approved_ip !== ip) {
+            return { status: 403, code: 'DEVICE_IP_CHANGED', message: `Este dispositivo foi autorizado no IP ${dev.approved_ip}, mas agora está no IP ${ip}. Peça ao administrador para reautorizá-lo.`, deviceId, ip };
         }
     } else if (deviceId) {
         seenDevice(deviceId, ip, userAgent, user && user.username);
@@ -402,5 +460,5 @@ module.exports = {
     listSpecialDays, setSpecialDay, todayAction, withinAttendantWindow, mergePeriods, hhmm, removeSpecialDay, periodsFor, dateKey, periodsText,
     check, clientIp, deviceIdOf, ipAllowed, parseCidr,
     networkMiddleware, requestMiddleware,
-    listDevices, updateDevice, removeDevice
+    listDevices, updateDevice, removeDevice, addDeviceByIp, socketOnline, events
 };

@@ -199,5 +199,5 @@
         });
     }
 
-    window.Schedule = { promptToday, loadPanel, openQuick, bindSocket, refreshPill };
+    window.Schedule = { promptToday, loadPanel, openQuick, bindSocket, refreshPill, toast };
 })();

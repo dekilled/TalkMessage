@@ -19,12 +19,13 @@
         return id;
     }
 
-    const ACCESS_CODES = ['NETWORK_BLOCKED', 'DEVICE_PENDING', 'DEVICE_BLOCKED', 'DEVICE_UNKNOWN', 'OUT_OF_HOURS'];
+    const ACCESS_CODES = ['NETWORK_BLOCKED', 'DEVICE_PENDING', 'DEVICE_BLOCKED', 'DEVICE_UNKNOWN', 'DEVICE_IP_CHANGED', 'OUT_OF_HOURS'];
     const ACCESS_TITLES = {
         NETWORK_BLOCKED: 'Fora da rede da secretaria',
         DEVICE_PENDING: 'Aguardando aprovação',
         DEVICE_BLOCKED: 'Dispositivo bloqueado',
         DEVICE_UNKNOWN: 'Dispositivo não identificado',
+        DEVICE_IP_CHANGED: 'O IP deste aparelho mudou',
         OUT_OF_HOURS: 'Fora do horário de expediente'
     };
 
@@ -36,7 +37,7 @@
             el.className = 'tm-access-blocked';
             document.body.appendChild(el);
         }
-        const code = info.deviceId ? `<p class="tm-device-code">Código do aparelho: <strong>${String(info.deviceId).slice(-6).toUpperCase()}</strong></p>` : '';
+        const code = info.deviceId ? `<p class="tm-device-code">Código do aparelho: <strong>${String(info.deviceId).slice(-6).toUpperCase()}</strong>${info.ip ? `<br><small>IP ${info.ip}</small>` : ''}</p>` : '';
         el.innerHTML = `<div class="tm-access-card">
             <div class="tm-access-icon">🔒</div>
             <h2>${ACCESS_TITLES[info.code] || 'Acesso bloqueado'}</h2>

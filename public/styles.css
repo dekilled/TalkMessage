@@ -2427,3 +2427,28 @@ body {
 .tm-toast > div { flex: 1; }
 .tm-toast button { background: #25D366; color: #073; border: none; border-radius: 8px; padding: 6px 10px; font-weight: 700; cursor: pointer; }
 .tm-toast .tm-toast-x { background: transparent; color: #aaa; font-size: 1.2rem; padding: 0 4px; }
+
+/* Lista de dispositivos autorizados */
+.devices-block { border-top: 4px solid #075e54; }
+.devices-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
+.devices-head h4 { margin: 0; }
+.devices-count { font-size: .85rem; color: #666; }
+.pending-count { color: #b7791f; }
+.devices-table { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.device-row { display: grid; grid-template-columns: 12px auto 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; background: #fff; border: 1px solid #e8eaee; border-left: 4px solid #f5a623; border-radius: 10px; }
+.device-row.device-approved { border-left-color: #28a745; }
+.device-row.device-blocked { border-left-color: #dc3545; opacity: .7; }
+.device-row.device-central { background: #f3faf8; }
+.device-row .device-icon { font-size: 1.5rem; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #c4c9cf; }
+.dot.online { background: #28c76f; box-shadow: 0 0 0 3px rgba(40,199,111,.2); }
+.ip-warn { color: #b02a37; font-weight: 600; }
+.device-add { border-top: 1px dashed #e3e3e3; padding-top: 10px; }
+.device-add-row { display: grid; grid-template-columns: 1fr 1fr 130px auto; gap: 8px; margin-top: 8px; }
+.device-add-row input, .device-add-row select { padding: 8px 10px; border: 1px solid #d6dbe1; border-radius: 8px; font: inherit; }
+@media (max-width: 768px) {
+    .device-row { grid-template-columns: 12px auto 1fr; }
+    .device-row .device-actions { grid-column: 1 / -1; justify-content: flex-start; }
+    .device-add-row { grid-template-columns: 1fr 1fr; }
+}
+.device-row .device-ip { background: none; padding: 0; font-family: inherit; font-size: .85rem; color: #555; }

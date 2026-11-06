@@ -660,6 +660,26 @@
                 <div class="config-block access-status" id="access-status-box">Carregando…</div>
 
                 <form id="access-form" class="access-form">
+                    <div class="config-block devices-block">
+                        <div class="devices-head">
+                            <h4>📱💻 Dispositivos autorizados</h4>
+                            <span class="devices-count" id="devices-count"></span>
+                        </div>
+                        <label class="access-switch"><input type="checkbox" name="enforceDevices"><span><strong>Somente aparelhos autorizados pelo servidor</strong><small>Aparelho novo aparece aqui como pendente até você autorizar.</small></span></label>
+                        <label class="access-switch"><input type="checkbox" name="bindDeviceIp"><span>Vincular cada aparelho ao IP em que foi autorizado<small>Se o IP mudar, o aparelho precisa ser reautorizado. Reserve IPs fixos no roteador.</small></span></label>
+                        <div class="devices-table" id="devices-container"></div>
+                        <div class="device-add">
+                            <strong>Autorizar por IP</strong>
+                            <div class="device-add-row">
+                                <input id="device-add-name" placeholder="Nome (ex: Recepção 2)">
+                                <input id="device-add-ip" placeholder="IP (ex: 192.168.0.20)" inputmode="decimal">
+                                <select id="device-add-type"><option value="computer">Computador</option><option value="mobile">Celular</option></select>
+                                <button type="button" id="device-add-btn" class="config-btn btn-primary">Autorizar</button>
+                            </div>
+                            <p class="input-hint">O primeiro aparelho que abrir o sistema nesse IP já entra autorizado.</p>
+                        </div>
+                    </div>
+
                     <div class="config-block">
                         <label class="access-switch access-master">
                             <input type="checkbox" name="disabled">
@@ -699,12 +719,7 @@
                         <p class="input-hint" id="access-net-hint"></p>
                     </div>
 
-                    <div class="config-block">
-                        <h4>📱 Dispositivos autorizados</h4>
-                        <label class="access-switch"><input type="checkbox" name="enforceDevices"><span>Somente aparelhos aprovados podem usar o sistema</span></label>
-                        <p class="input-hint">Todo aparelho que abre o sistema aparece aqui. Aprove os computadores e celulares da secretaria. O administrador sempre consegue entrar.</p>
-                        <div class="device-cards" id="devices-container"></div>
-                    </div>
+
 
                     <button type="submit" class="config-btn btn-primary">Salvar regras de acesso</button>
                     <span class="access-saved" hidden>Salvo ✓</span>

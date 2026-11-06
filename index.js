@@ -354,6 +354,18 @@ io.use((socket, next) => {
     next();
 });
 
+// Online/offline dos aparelhos + aviso em tempo real para os admins
+io.on('connection', (socket) => {
+    const deviceId = socket.handshake.auth && socket.handshake.auth.deviceId;
+    access.socketOnline(deviceId, +1);
+    socket.on('disconnect', () => access.socketOnline(deviceId, -1));
+});
+access.events.on('devices', (e) => {
+    for (const s of io.of('/').sockets.values()) {
+        if (s.user && s.user.role === 'admin') s.emit('devices_changed', e);
+    }
+});
+
 // A cada minuto derruba quem perdeu o acesso (fim do expediente, aparelho bloqueado…)
 function enforceAccessOnSockets() {
     for (const socket of io.of('/').sockets.values()) {
@@ -737,9 +749,17 @@ app.post('/access/override', auth.authMiddleware, auth.requireRole('admin'), (re
     res.json({ success: true, status: access.publicStatus() });
 });
 
+app.post('/devices', auth.authMiddleware, auth.requireRole('admin'), (req, res) => {
+    try {
+        res.json({ success: true, device: access.addDeviceByIp(req.body || {}, req.session.user.name) });
+    } catch (e) {
+        res.status(400).json({ success: false, message: e.message });
+    }
+});
+
 app.put('/devices/:id', auth.authMiddleware, auth.requireRole('admin'), (req, res) => {
     try {
-        if (!access.updateDevice(req.params.id, req.body || {})) return res.status(404).json({ success: false, message: 'Dispositivo não encontrado.' });
+        if (!access.updateDevice(req.params.id, req.body || {}, req.session.user.name)) return res.status(404).json({ success: false, message: 'Dispositivo não encontrado.' });
         enforceAccessOnSockets();
         res.json({ success: true });
     } catch (e) {
